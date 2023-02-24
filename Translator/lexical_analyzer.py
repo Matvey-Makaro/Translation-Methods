@@ -36,12 +36,17 @@ operators = frozenset({
     '=',
     '!',
     '!=',
+    '<',
+    '<=',
+    '>',
+    '>=',
     '&&',
     '||',
     '+',
     '-',
     '*',
     '/',
+    '%',
     '//'
 })
 
@@ -247,7 +252,8 @@ class LexicalAnalyzer:
             self._buffer += self._ch
             self._readch()
 
-        if not is_whitespace(self._ch) and self._ch not in operators and not self._ch == ';' and not is_eof(self._ch):
+        if not is_whitespace(self._ch) and self._ch not in operators and not self._ch == ';' and not is_eof(self._ch) \
+                and self._ch != ')':
             self._error_description = "wrong characters after a number"
             self._state = States.ERROR
             return

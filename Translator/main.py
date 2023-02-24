@@ -13,6 +13,11 @@ def main() -> None:
     except LexicalAnalyzerError as ex:
         print(ex)
 
+    print('######################################################################################')
+    # print(name_table._name_table)
+    for i in name_table._name_table.items():
+        print(i)
+
 
 if __name__ == '__main__':
     main()
