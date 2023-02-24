@@ -127,6 +127,8 @@ class LexemTypes(Enum):
 class LexTableItem:
     type: LexemTypes
     value: str
+    line_num: int
+    col_num: int
 
 
 class NameTableItemTypes(Enum):
@@ -341,7 +343,13 @@ class LexicalAnalyzer:
         self._ch = self._file.read(1)
 
     def _add_lexem(self, type: LexemTypes, value: str) -> None:
-        self._lexemes.append(LexTableItem(type, value))
+        if type == LexemTypes.IDENTIFIER or type == LexemTypes.STRING or \
+                type == LexemTypes.INT_NUM or type == LexemTypes.DOUBLE_NUM:
+            col_num = self._ch_num - len(self._buffer)
+        else:
+            col_num = self._ch_num - len(value)
+
+        self._lexemes.append(LexTableItem(type, value, self._line_num + 1, col_num + 1))
 
     def _add_to_name_table(self, name: str, type: NameTableItemTypes) -> int:
         return self._name_table.push(name, type)
