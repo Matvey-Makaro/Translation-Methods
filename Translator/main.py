@@ -1,4 +1,5 @@
 from lexical_analyzer import *
+from parser import Parser
 
 
 def main() -> None:
@@ -10,6 +11,7 @@ def main() -> None:
         lexemes = lex_analyzer.get_lexemes()
         for lexem in lexemes:
             print(lexem)
+        parser = Parser(lexemes)
     except LexicalAnalyzerError as ex:
         print(ex)
 

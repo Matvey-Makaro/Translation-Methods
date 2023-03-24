@@ -2,66 +2,6 @@ from enum import Enum
 from dataclasses import dataclass
 from common import *
 
-key_words = frozenset({
-    'int',
-    'double',
-    'bool',
-    'string',
-    'void',
-    'true',
-    'false',
-    'nullptr',
-    'while',
-    'continue',
-    'break',
-    'if',
-    'else',
-    'print',
-    'scan',
-    'to_string',
-    'stoi',
-    'stod',
-    'exit'
-})
-
-delimiters = frozenset({
-    '(',
-    ')',
-    ';',
-    '{',
-    '}'
-})
-
-operators = frozenset({
-    '=',
-    '!',
-    '!=',
-    '<',
-    '<=',
-    '>',
-    '>=',
-    '&&',
-    '||',
-    '+',
-    '-',
-    '*',
-    '/',
-    '%',
-    '//'
-})
-
-
-def is_key_word(word: str) -> bool:
-    return word in key_words
-
-
-def is_delimiter(s: str) -> bool:
-    return s in delimiters
-
-
-def is_operator(s: str) -> bool:
-    return s in operators
-
 
 class KeyWords(Enum):
     INT = 0,
@@ -99,11 +39,16 @@ class Operators(Enum):
     NOT_EQUAL = 2,
     AND = 3,
     OR = 4,
-    ADD = 5,
-    SUB = 6,
-    MUL = 7,
-    DIV = 8,
-    DOUBLE_SLASH = 9
+    PLUS = 5,
+    MINUS = 6,
+    ASTERISK = 7,
+    SLASH = 8,
+    DOUBLE_SLASH = 9,
+    LESS = 10,
+    GREATER = 11,
+    LESS_OR_EQUAL = 12,
+    GREATER_OR_EQUAL = 13,
+    PERCENT = 14
 
 
 class States(Enum):
@@ -128,10 +73,71 @@ class LexemTypes(Enum):
     STRING = 6
 
 
+key_words = {
+    'int': KeyWords.INT,
+    'double': KeyWords.DOUBLE,
+    'bool': KeyWords.BOOL,
+    'string': KeyWords.STRING,
+    'void': KeyWords.VOID,
+    'true': KeyWords.TRUE,
+    'false': KeyWords.FALSE,
+    'nullptr': KeyWords.NULLPTR,
+    'while': KeyWords.WHILE,
+    'continue': KeyWords.CONTINUE,
+    'break': KeyWords.BREAK,
+    'if': KeyWords.IF,
+    'else': KeyWords.ELSE,
+    'print': KeyWords.PRINT,
+    'scan': KeyWords.SCAN,
+    'to_string': KeyWords.TO_STRING,
+    'stoi': KeyWords.STOI,
+    'stod': KeyWords.STOD,
+    'exit': KeyWords.EXIT
+}
+
+delimiters = {
+    '(': Delimiters.OPEN_PARENTHESIS,
+    ')': Delimiters.CLOSE_PARENTHESIS,
+    ';': Delimiters.SEMICOLON,
+    '{': Delimiters.OPEN_BRACES,
+    '}': Delimiters.CLOSE_BRACES
+}
+
+operators = {
+    '=': Operators.EQUAL,
+    '!': Operators.NOT,
+    '!=': Operators.NOT_EQUAL,
+    '<': Operators.LESS,
+    '<=': Operators.LESS_OR_EQUAL,
+    '>': Operators.GREATER,
+    '>=': Operators.GREATER_OR_EQUAL,
+    '&&': Operators.AND,
+    '||': Operators.OR,
+    '+': Operators.PLUS,
+    '-': Operators.MINUS,
+    '*': Operators.ASTERISK,
+    '/': Operators.SLASH,
+    '%': Operators.PERCENT,
+    '//': Operators.DOUBLE_SLASH
+}
+
+
+def is_key_word(word: str) -> bool:
+    return word in key_words
+
+
+def is_delimiter(s: str) -> bool:
+    return s in delimiters
+
+
+def is_operator(s: str) -> bool:
+    return s in operators
+
+
 @dataclass()
 class LexTableItem:
     type: LexemTypes
-    value: str
+    value: int or KeyWords or Delimiters or Operators
     line_num: int
     col_num: int
 
@@ -232,10 +238,10 @@ class LexicalAnalyzer:
             self._readch()
 
         if is_key_word(self._buffer):
-            self._add_lexem(LexemTypes.KEY_WORD, self._buffer)
+            self._add_lexem(LexemTypes.KEY_WORD, key_words[self._buffer])
         else:
             id = self._add_to_name_table(self._buffer, NameTableItemTypes.VARIABLE)
-            self._add_lexem(LexemTypes.IDENTIFIER, str(id))
+            self._add_lexem(LexemTypes.IDENTIFIER, id)
 
         self._state = States.START
 
@@ -266,12 +272,12 @@ class LexicalAnalyzer:
             lexem_type = LexemTypes.INT_NUM
 
         id = self._add_to_name_table(self._buffer, name_table_item_type)
-        self._add_lexem(lexem_type, str(id))
+        self._add_lexem(lexem_type, id)
 
         self._state = States.START
 
     def _delimiter_state(self) -> None:
-        self._add_lexem(LexemTypes.DELIMITER, self._ch)
+        self._add_lexem(LexemTypes.DELIMITER, delimiters[self._ch])
         self._readch()
         self._state = States.START
 
@@ -300,7 +306,7 @@ class LexicalAnalyzer:
             self._readch()
 
         id = self._add_to_name_table(self._buffer, NameTableItemTypes.STRING_CONSTANT)
-        self._add_lexem(LexemTypes.STRING, str(id))
+        self._add_lexem(LexemTypes.STRING, id)
         self._readch()
         self._state = States.START
 
@@ -317,13 +323,13 @@ class LexicalAnalyzer:
                 self._readch()
                 return
 
-            self._add_lexem(LexemTypes.OPERATOR, self._buffer)
+            self._add_lexem(LexemTypes.OPERATOR, operators[self._buffer])
             self._readch()
             self._state = States.START
             return
 
         if is_operator(first_symbol):
-            self._add_lexem(LexemTypes.OPERATOR, first_symbol)
+            self._add_lexem(LexemTypes.OPERATOR, operators[first_symbol])
             self._state = States.START
             return
 
@@ -348,12 +354,16 @@ class LexicalAnalyzer:
             self._ch_num += 1
         self._ch = self._file.read(1)
 
-    def _add_lexem(self, type: LexemTypes, value: str) -> None:
+    def _add_lexem(self, type: LexemTypes, value) -> None:
         if type == LexemTypes.IDENTIFIER or type == LexemTypes.STRING or \
                 type == LexemTypes.INT_NUM or type == LexemTypes.DOUBLE_NUM:
             col_num = self._ch_num - len(self._buffer)
         else:
-            col_num = self._ch_num - len(value)
+            col_num = self._ch_num  # TODO: There may be an error here.
+
+        # Removed because value is no longer a string, but an enumeration.
+        # else:
+        #     col_num = self._ch_num - len(value)
 
         self._lexemes.append(LexTableItem(type, value, self._line_num + 1, col_num + 1))
 
