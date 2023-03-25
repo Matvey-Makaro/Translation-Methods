@@ -173,9 +173,7 @@ class NameTable:
 class LexicalAnalyzerError(Exception):
     def __init__(self, text: str, fname: str, line_num: int, ch_num: int):
         self._txt = 'File "' + fname + '", line ' + str(line_num) + ' col ' + str(ch_num) + ': ' + text
-
-    def __str__(self):
-        return self._txt
+        super().__init__(self._txt)
 
 
 class LexicalAnalyzer:
