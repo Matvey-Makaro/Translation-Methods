@@ -27,6 +27,10 @@ def main() -> None:
     for i in variable_table:
         print(i)
 
+    print('######################################################################################')
+    print("Syntax tree: ")
+    parser.print_syntax_tree()
+
 
 if __name__ == '__main__':
     main()

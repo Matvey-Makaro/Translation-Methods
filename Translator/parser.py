@@ -1,8 +1,9 @@
-from lexical_analyzer import *
+from common import *
+from tables import *
 
 
 def is_variable_type(key_word: KeyWords) -> bool:
-    return key_word == KeyWords.INT or key_words == KeyWords.DOUBLE or \
+    return key_word == KeyWords.INT or key_word == KeyWords.DOUBLE or \
         key_word == KeyWords.BOOL or key_word == KeyWords.STRING or key_word == KeyWords.VOID
 
 
@@ -27,16 +28,44 @@ class DoubleDeclarationError(ParserError):
         super().__init__(f"Double declaration of variable {var_name}", fname, line_num, ch_num)
 
 
+class NodeTypes(Enum):
+    COMMON = 0,
+    DECLARATION = 1,
+    CODE_BLOCK = 2
+
+
 class Node:
-    def __init__(self, lexem):
-        self._lexem = lexem
+    def __init__(self, lexeme: LexTableItem or None, type: NodeTypes = NodeTypes.COMMON):
+        self._lexeme = lexeme
         self._childs = []
+        self._type = type
 
     def add_child(self, node) -> None:
         self._childs.append(node)
 
-    def get_lexem(self) -> LexTableItem:
-        return self._lexem
+    def get_childs(self) -> list:
+        return self._childs
+
+    def get_lexeme(self) -> LexTableItem:
+        return self._lexeme
+
+    def __str__(self):
+        if self._lexeme is None:
+            return str(self._type)
+        elif self._lexeme.type == LexemTypes.IDENTIFIER or \
+                self._lexeme.type in (LexemTypes.INT_NUM, LexemTypes.DOUBLE_NUM, LexemTypes.STRING):
+            return str(self._lexeme.type) + " " + str(self._lexeme.value)
+        else:
+            return str(self._lexeme.value)
+
+
+def print_tree(root, depth: int = 0):
+    if root is None:
+        return
+
+    print('\t' * depth + str(root))
+    for child in root.get_childs():
+        print_tree(child, depth + 1)
 
 
 class Parser:
@@ -49,7 +78,11 @@ class Parser:
         self._block_level = 0
         self._block_id = 0
         self._scope_stack = [(self._block_level, self._block_id)]
+        self._root = Node(None, NodeTypes.CODE_BLOCK)
         self.parse()
+
+    def print_syntax_tree(self) -> None:
+        print_tree(self._root)
 
     def _go_to_next_lexeme(self) -> None:
         self._curr_lex_index += 1
@@ -78,10 +111,15 @@ class Parser:
 
     def _expect_var_type(self, lexeme: LexTableItem, type: VariableTypes) -> None:
         if lexeme.type != LexemTypes.IDENTIFIER:
-            raise ExpectedError(str(type) + "variable expected", self._fname, lexeme.line_num, lexeme.col_num)
+            raise ExpectedError(str(type) + " variable expected", self._fname, lexeme.line_num, lexeme.col_num)
         var = self._get_variable(lexeme)
         if var.type != type:
-            raise ExpectedError(str(type) + "variable expected", self._fname, lexeme.line_num, lexeme.col_num)
+            raise ExpectedError(str(type) + " variable expected", self._fname, lexeme.line_num, lexeme.col_num)
+
+    def _expect_identifier(self) -> None:
+        lexeme = self._get_curr_lexeme()
+        if lexeme.type != LexemTypes.IDENTIFIER:
+            raise ExpectedError("identifier", self._fname, lexeme.line_num, lexeme.col_num)
 
     def _are_lexemes_remaining(self) -> bool:
         return self._curr_lex_index < len(self._lexemes)
@@ -101,13 +139,24 @@ class Parser:
         self._block_level -= 1
         self._scope_stack.pop()
 
-    def _parse_block_code(self):
+    def _parse_block_code(self) -> Node:
         self._expect_delimiter(Delimiters.OPEN_BRACES)
+        self._go_to_next_lexeme()
         self._enter_block()
 
+        code_block_node = Node(None, NodeTypes.CODE_BLOCK)
+
+        while self._are_lexemes_remaining() and not self._is_match_cur_lexeme(Delimiters.CLOSE_BRACES):
+            code_block_node.add_child(self._parse_statement())
+
+        self._expect_delimiter(Delimiters.CLOSE_BRACES)
+        self._go_to_next_lexeme()
         self._exit_block()
 
+        return code_block_node
+
     def _parse_declare_identifier(self, var_type: VariableTypes) -> Node:
+        self._expect_identifier()
         lexeme = self._get_curr_lexeme()
         node = Node(lexeme)
         curr_var = self._get_variable(lexeme)
@@ -117,10 +166,11 @@ class Parser:
 
         if curr_var.type != VariableTypes.UNKNOWN:
             for var in self._variable_table:
-                if curr_var.name == var.name and curr_var.block_id == var.block_id:
+                if curr_var.name == var.name and block_id == var.block_id:
                     raise DoubleDeclarationError(curr_var.name, self._fname, lexeme.line_num, lexeme.col_num)
 
             self._variable_table.append(VariableTableItem(curr_var.name, var_type, block_level, block_id))
+            curr_var = self._variable_table[-1]
             lexeme.value = len(self._variable_table) - 1
 
         curr_var.type = var_type
@@ -131,6 +181,7 @@ class Parser:
         return node
 
     def _parse_using_identifier(self) -> Node:
+        self._expect_identifier()
         lexeme = self._get_curr_lexeme()
         node = Node(lexeme)
 
@@ -171,7 +222,7 @@ class Parser:
         lexeme = self._get_curr_lexeme()
         if lexeme.type == LexemTypes.IDENTIFIER:
             node = self._parse_using_identifier()
-            self._expect_var_type(node.get_lexem(), VariableTypes.STRING)
+            self._expect_var_type(node.get_lexeme(), VariableTypes.STRING)
         elif lexeme.value == KeyWords.TO_STRING:
             node = self._parse_to_string()
 
@@ -190,18 +241,68 @@ class Parser:
         self._expect_delimiter(Delimiters.SEMICOLON)
         self._go_to_next_lexeme()
 
-    def _parse_type(self):
-        pass
+    def _parse_var_type(self) -> (Node, VariableTypes):
+        type_lexeme = self._get_curr_lexeme()
+        type_node = Node(type_lexeme)
+        var_type = VariableTypes.UNKNOWN
+        if type_lexeme.value == KeyWords.INT:
+            var_type = VariableTypes.INT
+        elif type_lexeme.value == KeyWords.DOUBLE:
+            var_type = VariableTypes.DOUBLE
+        elif type_lexeme.value == KeyWords.STRING:
+            var_type = VariableTypes.STRING
+        elif type_lexeme.value == KeyWords.BOOL:
+            var_type = VariableTypes.BOOL
+        else:
+            raise ParserError("Unknown variable type", self._fname, type_lexeme.line_num, type_lexeme.col_num)
+
+        self._go_to_next_lexeme()
+        return type_node, var_type
+
+    def _parse_optional_initialization(self, identifier_node: Node) -> Node:
+        if not self._are_lexemes_remaining() or not self._is_match_cur_lexeme(Operators.EQUAL):
+            return identifier_node
+        equal_lexeme = self._get_curr_lexeme()
+        equal_node = Node(equal_lexeme)
+        equal_node.add_child(identifier_node)
+
+        var = self._get_variable(identifier_node.get_lexeme())
+        var_type = var.type
+
+        if var_type in (VariableTypes.INT, VariableTypes.DOUBLE):
+            pass  # TODO: parse arithmetic expression
+        elif var_type == VariableTypes.STRING:
+            rhs_node = self._parse_string_expression()
+        elif var_type == VariableTypes.BOOL:
+            pass  # TODO: parse bool expression
+
+        equal_node.add_child(rhs_node)
+        return equal_node
+
+    def _parse_var_declaration(self) -> Node:
+        type_node, var_type = self._parse_var_type()
+        identifier_node = self._parse_declare_identifier(var_type)
+        declaration_node = Node(None, NodeTypes.DECLARATION)
+        declaration_node.add_child(type_node)
+        # TODO: Доделать self._parse_optional_initialization()
+        ident_or_eq_node = self._parse_optional_initialization(identifier_node)
+        declaration_node.add_child(ident_or_eq_node)
+        self._expect_delimiter(Delimiters.SEMICOLON)
+        self._go_to_next_lexeme()
+        return declaration_node
+
+    def _parse_statement(self) -> Node:
+        lexeme = self._get_curr_lexeme()
+        if lexeme.type == LexemTypes.KEY_WORD:
+            if lexeme.value == KeyWords.PRINT:
+                return self._parse_print()
+            elif is_variable_type(lexeme.value):
+                return self._parse_var_declaration()
+        elif lexeme.type == LexemTypes.DELIMITER:
+            if lexeme.value == Delimiters.OPEN_BRACES:
+                return self._parse_block_code()
 
     def parse(self):
         while self._are_lexemes_remaining():
-            lexeme = self._get_curr_lexeme()
-            if lexeme.type == LexemTypes.KEY_WORD:
-                if lexeme.value == KeyWords.PRINT:
-                    self._parse_print()
-                elif is_variable_type(lexeme.value):
-                    pass
-                elif lexeme.value == Delimiters.OPEN_BRACES:
-                    self._parse_block_code()
-
-            self._go_to_next_lexeme()  # TODO: Delete later.
+            node = self._parse_statement()
+            self._root.add_child(node)
