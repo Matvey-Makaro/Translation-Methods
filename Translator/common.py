@@ -47,7 +47,8 @@ class Operators(Enum):
     GREATER = 11,
     LESS_OR_EQUAL = 12,
     GREATER_OR_EQUAL = 13,
-    PERCENT = 14
+    PERCENT = 14,
+    DOUBLE_EQUAL = 15
 
 
 class States(Enum):
@@ -105,6 +106,7 @@ delimiters = {
 operators = {
     '=': Operators.EQUAL,
     '!': Operators.NOT,
+    '==': Operators.DOUBLE_EQUAL,
     '!=': Operators.NOT_EQUAL,
     '<': Operators.LESS,
     '<=': Operators.LESS_OR_EQUAL,
