@@ -1,173 +1,5 @@
-from enum import Enum
-from dataclasses import dataclass
+from tables import *
 from common import *
-
-
-class KeyWords(Enum):
-    INT = 0,
-    DOUBLE = 1,
-    BOOL = 2,
-    STRING = 3,
-    VOID = 4,
-    TRUE = 5,
-    FALSE = 6,
-    NULLPTR = 7,
-    WHILE = 8,
-    CONTINUE = 9,
-    BREAK = 10,
-    IF = 11,
-    ELSE = 12,
-    PRINT = 13,
-    SCAN = 14,
-    TO_STRING = 15,
-    STOI = 16,
-    STOD = 17,
-    EXIT = 18,
-
-
-class Delimiters(Enum):
-    OPEN_PARENTHESIS = 0,
-    CLOSE_PARENTHESIS = 1,
-    SEMICOLON = 2,
-    OPEN_BRACES = 3,
-    CLOSE_BRACES = 4,
-
-
-class Operators(Enum):
-    EQUAL = 0,
-    NOT = 1,
-    NOT_EQUAL = 2,
-    AND = 3,
-    OR = 4,
-    PLUS = 5,
-    MINUS = 6,
-    ASTERISK = 7,
-    SLASH = 8,
-    DOUBLE_SLASH = 9,
-    LESS = 10,
-    GREATER = 11,
-    LESS_OR_EQUAL = 12,
-    GREATER_OR_EQUAL = 13,
-    PERCENT = 14
-
-
-class States(Enum):
-    START = 0,
-    ID_OR_KEY_WORD = 1,
-    NUMBER = 2,
-    DELIMITER = 3,
-    OPERATOR = 4,
-    STRING = 5,
-    ONE_LINE_COMMENT = 6,
-    ERROR = 9,
-    END = 10,
-
-
-class LexemTypes(Enum):
-    KEY_WORD = 0,
-    IDENTIFIER = 1,
-    DELIMITER = 2,
-    OPERATOR = 3,
-    INT_NUM = 4,
-    DOUBLE_NUM = 5,
-    STRING = 6
-
-
-key_words = {
-    'int': KeyWords.INT,
-    'double': KeyWords.DOUBLE,
-    'bool': KeyWords.BOOL,
-    'string': KeyWords.STRING,
-    'void': KeyWords.VOID,
-    'true': KeyWords.TRUE,
-    'false': KeyWords.FALSE,
-    'nullptr': KeyWords.NULLPTR,
-    'while': KeyWords.WHILE,
-    'continue': KeyWords.CONTINUE,
-    'break': KeyWords.BREAK,
-    'if': KeyWords.IF,
-    'else': KeyWords.ELSE,
-    'print': KeyWords.PRINT,
-    'scan': KeyWords.SCAN,
-    'to_string': KeyWords.TO_STRING,
-    'stoi': KeyWords.STOI,
-    'stod': KeyWords.STOD,
-    'exit': KeyWords.EXIT
-}
-
-delimiters = {
-    '(': Delimiters.OPEN_PARENTHESIS,
-    ')': Delimiters.CLOSE_PARENTHESIS,
-    ';': Delimiters.SEMICOLON,
-    '{': Delimiters.OPEN_BRACES,
-    '}': Delimiters.CLOSE_BRACES
-}
-
-operators = {
-    '=': Operators.EQUAL,
-    '!': Operators.NOT,
-    '!=': Operators.NOT_EQUAL,
-    '<': Operators.LESS,
-    '<=': Operators.LESS_OR_EQUAL,
-    '>': Operators.GREATER,
-    '>=': Operators.GREATER_OR_EQUAL,
-    '&&': Operators.AND,
-    '||': Operators.OR,
-    '+': Operators.PLUS,
-    '-': Operators.MINUS,
-    '*': Operators.ASTERISK,
-    '/': Operators.SLASH,
-    '%': Operators.PERCENT,
-    '//': Operators.DOUBLE_SLASH
-}
-
-
-def is_key_word(word: str) -> bool:
-    return word in key_words
-
-
-def is_delimiter(s: str) -> bool:
-    return s in delimiters
-
-
-def is_operator(s: str) -> bool:
-    return s in operators
-
-
-@dataclass()
-class LexTableItem:
-    type: LexemTypes
-    value: int or KeyWords or Delimiters or Operators
-    line_num: int
-    col_num: int
-
-
-class NameTableItemTypes(Enum):
-    VARIABLE = 0,
-    INT_CONSTANT = 1,
-    DOUBLE_CONSTANT = 2,
-    STRING_CONSTANT = 3,
-
-
-@dataclass()
-class NameTableItem:
-    type: NameTableItemTypes
-    id: int
-
-
-class NameTable:
-    def __init__(self):
-        self._name_table = {}
-        self._id_counter = 0
-
-    def push(self, name: str, type: NameTableItemTypes) -> int:
-        if name in self._name_table:
-            return self._name_table.get(name).id
-
-        id = self._id_counter
-        self._id_counter += 1
-        self._name_table[name] = NameTableItem(type, id)
-        return id
 
 
 class LexicalAnalyzerError(Exception):
@@ -177,14 +9,15 @@ class LexicalAnalyzerError(Exception):
 
 
 class LexicalAnalyzer:
-    def __init__(self, fname: str, name_table: NameTable):
+    def __init__(self, fname: str, literal_table: LiteralTable, variable_table: list):
         self._fname = fname
         self._file = open(self._fname, 'r')
         self._ch = ''
         self._buffer = ''
         self._state = States.START
         self._lexemes = []
-        self._name_table = name_table
+        self._literal_table = literal_table
+        self._variable_table = variable_table
         self._line_num = 0
         self._ch_num = 0
         self._error_description = ''
@@ -238,7 +71,7 @@ class LexicalAnalyzer:
         if is_key_word(self._buffer):
             self._add_lexem(LexemTypes.KEY_WORD, key_words[self._buffer])
         else:
-            id = self._add_to_name_table(self._buffer, NameTableItemTypes.VARIABLE)
+            id = self._add_to_variable_table(self._buffer)
             self._add_lexem(LexemTypes.IDENTIFIER, id)
 
         self._state = States.START
@@ -263,13 +96,13 @@ class LexicalAnalyzer:
             return
 
         if was_dot:
-            name_table_item_type = NameTableItemTypes.DOUBLE_CONSTANT
+            literal_type = LiteralTypes.DOUBLE_CONSTANT
             lexem_type = LexemTypes.DOUBLE_NUM
         else:
-            name_table_item_type = NameTableItemTypes.INT_CONSTANT
+            literal_type = LiteralTypes.INT_CONSTANT
             lexem_type = LexemTypes.INT_NUM
 
-        id = self._add_to_name_table(self._buffer, name_table_item_type)
+        id = self._add_to_literal_table(self._buffer, literal_type)
         self._add_lexem(lexem_type, id)
 
         self._state = States.START
@@ -303,7 +136,7 @@ class LexicalAnalyzer:
 
             self._readch()
 
-        id = self._add_to_name_table(self._buffer, NameTableItemTypes.STRING_CONSTANT)
+        id = self._add_to_literal_table(self._buffer, LiteralTypes.STRING_CONSTANT)
         self._add_lexem(LexemTypes.STRING, id)
         self._readch()
         self._state = States.START
@@ -365,8 +198,17 @@ class LexicalAnalyzer:
 
         self._lexemes.append(LexTableItem(type, value, self._line_num + 1, col_num + 1))
 
-    def _add_to_name_table(self, name: str, type: NameTableItemTypes) -> int:
-        return self._name_table.push(name, type)
+    def _add_to_literal_table(self, value: str, type: LiteralTypes) -> int:
+        return self._literal_table.push(value, type)
+
+    def _add_to_variable_table(self, name: str) -> int:
+        # TODO: Can be replaced by a faster search using a hash table.
+        for i in range(len(self._variable_table)):
+            if self._variable_table[i].name == name:
+                return i
+
+        self._variable_table.append(VariableTableItem(name, VariableTypes.UNKNOWN, -1, -1))
+        return len(self._variable_table) - 1
 
     def get_lexemes(self) -> list:
         return self._lexemes

@@ -5,19 +5,26 @@ from parser import Parser
 def main() -> None:
     # fname = input("Enter file name: ")
     fname = "test.cpp"
-    name_table = NameTable()
+    literal_table = LiteralTable()
+    variable_table = []
     try:
-        lex_analyzer = LexicalAnalyzer(fname, name_table)
+        lex_analyzer = LexicalAnalyzer(fname, literal_table, variable_table)
         lexemes = lex_analyzer.get_lexemes()
         for lexem in lexemes:
             print(lexem)
-        parser = Parser(lexemes)
+        parser = Parser(fname, lexemes, literal_table, variable_table)
     except LexicalAnalyzerError as ex:
         print(ex)
 
     print('######################################################################################')
-    # print(name_table._name_table)
-    for i in name_table._name_table.items():
+    print("Literal table: ")
+    # print(literal_table._name_table)
+    for i in literal_table._literals:
+        print(i)
+
+    print('######################################################################################')
+    print("Variable table: ")
+    for i in variable_table:
         print(i)
 
 
