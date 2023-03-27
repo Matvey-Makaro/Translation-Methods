@@ -21,6 +21,11 @@ class ExpressionTypes(Enum):
     STRING = 2
 
 
+class ComparisonTypes(Enum):
+    ARITHMETIC = 0,
+    STRING = 1
+
+
 class ParserError(Exception):
     def __init__(self, text: str, fname: str, line_num: int, ch_num: int):
         self._txt = 'File "' + fname + '", line ' + str(line_num) + ' col ' + str(ch_num) + ': ' + text
@@ -140,10 +145,26 @@ class Parser:
         if lexeme.type != LexemTypes.IDENTIFIER:
             raise ExpectedError("identifier", self._fname, lexeme.line_num, lexeme.col_num)
 
-    def _expect_stoid(self) -> Node:
+    def _expect_stoid(self) -> None:
         lexeme = self._get_curr_lexeme()
         if not (lexeme.value in (KeyWords.STOI, KeyWords.STOD)):
             raise ExpectedError("stoi or stod", self._fname, lexeme.line_num, lexeme.col_num)
+
+    def _expect_comparison_operator(self) -> None:
+        lexeme = self._get_curr_lexeme()
+        if not (lexeme.value in (Operators.DOUBLE_EQUAL, Operators.NOT_EQUAL, Operators.LESS,
+                                 Operators.LESS_OR_EQUAL, Operators.GREATER, Operators.GREATER_OR_EQUAL)):
+            raise ExpectedError("One of the comparison operators", self._fname, lexeme.line_num, lexeme.col_num)
+
+    def _expect_bool_literal(self) -> None:
+        lexeme = self._get_curr_lexeme()
+        if lexeme.value != KeyWords.TRUE and lexeme.value != KeyWords.FALSE:
+            raise ExpectedError("Bool literal", self._fname, lexeme.line_num, lexeme.col_num)
+
+    def _expect_string_literal(self) -> None:
+        lexeme = self._get_curr_lexeme()
+        if lexeme.type != LexemTypes.STRING:
+            raise ExpectedError("String literal", self._fname, lexeme.line_num, lexeme.col_num)
 
     def _are_lexemes_remaining(self) -> bool:
         return self._curr_lex_index < len(self._lexemes)
@@ -266,9 +287,11 @@ class Parser:
             self._go_to_next_lexeme()
         elif lexeme.value in (KeyWords.STOI, KeyWords.STOD):
             node = self._parse_stoid()
-        else:
+        elif lexeme.type == LexemTypes.IDENTIFIER:
             node = self._parse_using_identifier()
             self._expect_var_type(node.get_lexeme(), (VariableTypes.INT, VariableTypes.DOUBLE))
+        else:
+            raise ExpectedError("Number", self._fname, lexeme.line_num, lexeme.col_num)
 
         return node
 
@@ -312,16 +335,127 @@ class Parser:
 
         return lhs_node
 
+    def _parse_bool_literal(self) -> Node:
+        self._expect_bool_literal()
+        node = Node(self._get_curr_lexeme())
+        self._go_to_next_lexeme()
+        return node
+
+    def _parse_comparison_term(self) -> (Node, ComparisonTypes):
+        lexeme = self._get_curr_lexeme()
+        old_lex_index = self._curr_lex_index
+
+        try:
+            node = self._parse_arithmetic_expression()
+            return node, ComparisonTypes.ARITHMETIC
+        except ParserError:
+            self._curr_lex_index = old_lex_index
+            try:
+                node = self._parse_string_expression()
+                return node, ComparisonTypes.STRING
+            except ParserError:
+                raise ExpectedError("arithmetic or string expression", self._fname, lexeme.line_num, lexeme.col_num)
+
+    def _parse_comparison(self) -> Node:
+        lexeme = self._get_curr_lexeme()
+        lhs_node, lhs_type = self._parse_comparison_term()
+        self._expect_comparison_operator()
+        op_node = Node(self._get_curr_lexeme())
+        self._go_to_next_lexeme()
+        rhs_node, rhs_type = self._parse_comparison_term()
+
+        if lhs_type != rhs_type:
+            raise ParserError("Cannot compare " + str(lhs_type) + "and" + str(rhs_type),
+                              self._fname, lexeme.line_num, lexeme.col_num)
+
+        op_node.add_child(lhs_node)
+        op_node.add_child(rhs_node)
+        return op_node
+
+    def _parse_bool_term(self) -> Node:
+        lexeme = self._get_curr_lexeme()
+        if lexeme.type == LexemTypes.IDENTIFIER:
+            if self._get_variable(lexeme).type == VariableTypes.BOOL:
+                node = self._parse_using_identifier()
+        elif self._is_match_cur_lexeme(Delimiters.OPEN_PARENTHESIS):
+            old_lex_index = self._curr_lex_index
+            self._go_to_next_lexeme()
+
+            # Can be bool experession or a comparison.
+            try:
+                node = self._parse_bool_expression()
+                self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
+                self._go_to_next_lexeme()
+            except ParserError:
+                self._curr_lex_index = old_lex_index
+                node = self._parse_comparison()
+        elif lexeme.value in (KeyWords.TRUE, KeyWords.FALSE):
+            node = self._parse_bool_literal()
+        else:
+            node = self._parse_comparison()
+
+        return node
+
+    def _parse_bool_term_with_possible_not(self) -> Node:
+        was_not = False
+        not_node = None
+        if self._is_match_cur_lexeme(Operators.NOT):
+            not_node = self._parse_operator(Operators.NOT)
+            was_not = True
+
+        node = self._parse_bool_term()
+        if not was_not:
+            return node
+
+        not_node.add_child(node)
+        return not_node
+
+    def _parse_bool_and(self) -> Node:
+        lhs_node = self._parse_bool_term_with_possible_not()
+
+        while self._are_lexemes_remaining() and self._is_match_cur_lexeme(Operators.AND):
+            and_node = self._parse_operator(Operators.AND)
+            rhs_node = self._parse_bool_term_with_possible_not()
+            and_node.add_child(lhs_node)
+            and_node.add_child(rhs_node)
+            lhs_node = and_node
+
+        return lhs_node
+
+    def _parse_bool_expression(self) -> Node:
+        lhs_node = self._parse_bool_and()
+
+        while self._are_lexemes_remaining() and self._is_match_cur_lexeme(Operators.OR):
+            or_node = self._parse_operator(Operators.OR)
+            rhs_node = self._parse_bool_and()
+            or_node.add_child(lhs_node)
+            or_node.add_child((rhs_node))
+            lhs_node = or_node
+
+        return lhs_node
+
     def _parse_to_string(self) -> Node:
         self._expect_key_word(KeyWords.TO_STRING)
         to_string_node = Node(self._get_curr_lexeme())
         self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
         self._go_to_next_lexeme()
-        # TODO: parse arithmetic, bool or string expression.
+        expr_node = self._parse_arithmetic_expression()
         self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
         self._go_to_next_lexeme()
+        to_string_node.add_child(expr_node)
+        return to_string_node
+
+    def _parse_scan(self) -> Node:
+        self._expect_key_word(KeyWords.SCAN)
+        scan_node = Node(self._get_curr_lexeme())
+        self._go_to_next_lexeme()
+        self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
+        self._go_to_next_lexeme()
+        self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
+        self._go_to_next_lexeme()
+        return scan_node
 
     def _parse_string_terminal(self) -> Node:
         lexeme = self._get_curr_lexeme()
@@ -330,9 +464,26 @@ class Parser:
             self._expect_var_type(node.get_lexeme(), VariableTypes.STRING)
         elif lexeme.value == KeyWords.TO_STRING:
             node = self._parse_to_string()
+        elif lexeme.value == KeyWords.SCAN:
+            node = self._parse_scan()
+        else:
+            self._expect_string_literal()
+            node = Node(lexeme)
+            self._go_to_next_lexeme()
+
+        return node
 
     def _parse_string_expression(self):
-        pass
+        lhs_node = self._parse_string_terminal()
+
+        while self._are_lexemes_remaining() and self._is_match_cur_lexeme(Operators.PLUS):
+            op_node = self._parse_operator(Operators.PLUS)
+            rhs_node = self._parse_string_terminal()
+            op_node.add_child(lhs_node)
+            op_node.add_child(rhs_node)
+            lhs_node = op_node
+
+        return lhs_node
 
     def _parse_print(self) -> Node:
         self._expect_key_word(KeyWords.PRINT)
@@ -380,7 +531,7 @@ class Parser:
         elif var_type == VariableTypes.STRING:
             rhs_node = self._parse_string_expression()
         elif var_type == VariableTypes.BOOL:
-            pass  # TODO: parse bool expression
+            rhs_node = self._parse_bool_expression()
 
         equal_node.add_child(rhs_node)
         return equal_node
