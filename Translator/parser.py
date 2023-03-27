@@ -7,6 +7,20 @@ def is_variable_type(key_word: KeyWords) -> bool:
         key_word == KeyWords.BOOL or key_word == KeyWords.STRING or key_word == KeyWords.VOID
 
 
+def is_addop(op: Operators) -> bool:
+    return op == Operators.PLUS or op == Operators.MINUS
+
+
+def is_mulop(op: Operators) -> bool:
+    return op in (Operators.ASTERISK, Operators.SLASH, Operators.PERCENT)
+
+
+class ExpressionTypes(Enum):
+    ARITHMETIC = 0,
+    BOOL = 1,
+    STRING = 2
+
+
 class ParserError(Exception):
     def __init__(self, text: str, fname: str, line_num: int, ch_num: int):
         self._txt = 'File "' + fname + '", line ' + str(line_num) + ' col ' + str(ch_num) + ': ' + text
@@ -109,17 +123,27 @@ class Parser:
         if lexeme.value != operator:
             raise ExpectedError(str(operator), self._fname, lexeme.line_num, lexeme.col_num)
 
-    def _expect_var_type(self, lexeme: LexTableItem, type: VariableTypes) -> None:
+    def _expect_var_type(self, lexeme: LexTableItem, type: VariableTypes or tuple) -> None:
         if lexeme.type != LexemTypes.IDENTIFIER:
             raise ExpectedError(str(type) + " variable expected", self._fname, lexeme.line_num, lexeme.col_num)
         var = self._get_variable(lexeme)
-        if var.type != type:
-            raise ExpectedError(str(type) + " variable expected", self._fname, lexeme.line_num, lexeme.col_num)
+        if isinstance(type, VariableTypes):
+            if var.type != type:
+                raise ExpectedError(str(type) + " variable expected", self._fname, lexeme.line_num, lexeme.col_num)
+        else:
+            if var.type in type:
+                raise ExpectedError("One of the following variable types expected: " + str(type), self._fname,
+                                    lexeme.line_num, lexeme.col_num)
 
     def _expect_identifier(self) -> None:
         lexeme = self._get_curr_lexeme()
         if lexeme.type != LexemTypes.IDENTIFIER:
             raise ExpectedError("identifier", self._fname, lexeme.line_num, lexeme.col_num)
+
+    def _expect_stoid(self) -> Node:
+        lexeme = self._get_curr_lexeme()
+        if not (lexeme.value in (KeyWords.STOI, KeyWords.STOD)):
+            raise ExpectedError("stoi or stod", self._fname, lexeme.line_num, lexeme.col_num)
 
     def _are_lexemes_remaining(self) -> bool:
         return self._curr_lex_index < len(self._lexemes)
@@ -208,8 +232,89 @@ class Parser:
         self._go_to_next_lexeme()
         return node
 
+    def _parse_operator(self, op: Operators):
+        self._expect_operator(op)
+        op_node = Node(self._get_curr_lexeme())
+        self._go_to_next_lexeme()
+        return op_node
+
+    def _parse_stoid(self) -> Node:
+        self._expect_stoid()
+        lexeme = self._get_curr_lexeme()
+        stoid_node = Node(lexeme)
+        self._go_to_next_lexeme()
+
+        self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
+        self._go_to_next_lexeme()
+        string_node = self._parse_string_expression()
+        self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
+        self._go_to_next_lexeme()
+
+        stoid_node.add_child(string_node)
+        return stoid_node
+
+    def _parse_terminal(self) -> Node:
+        lexeme = self._get_curr_lexeme()
+
+        if self._is_match_cur_lexeme(Delimiters.OPEN_PARENTHESIS):
+            self._go_to_next_lexeme()
+            node = self._parse_arithmetic_expression()
+            self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
+            self._go_to_next_lexeme()
+        elif lexeme.type in (LexemTypes.INT_NUM, LexemTypes.DOUBLE_NUM):
+            node = Node(lexeme)
+            self._go_to_next_lexeme()
+        elif lexeme.value in (KeyWords.STOI, KeyWords.STOD):
+            node = self._parse_stoid()
+        else:
+            node = self._parse_using_identifier()
+            self._expect_var_type(node.get_lexeme(), (VariableTypes.INT, VariableTypes.DOUBLE))
+
+        return node
+
+    def _parse_terminals_and_mul_ops(self) -> Node:
+        lhs_node = self._parse_terminal()
+
+        while self._are_lexemes_remaining() and is_mulop(self._get_curr_lexeme().value):
+            lexeme = self._get_curr_lexeme()
+            op_node = self._parse_operator(lexeme.value)
+            rhs_node = self._parse_terminal()
+            op_node.add_child(lhs_node)
+            op_node.add_child(rhs_node)
+            lhs_node = op_node
+
+        return lhs_node
+
+    def _parse_unary_operation_and_terminal(self) -> Node:
+        lexeme = self._get_curr_lexeme()
+        op_node = None
+        if is_addop(lexeme.value):
+            op_node = self._parse_operator(lexeme.value)
+
+        node = self._parse_terminals_and_mul_ops()
+
+        if op_node is None:
+            return node
+
+        op_node.add_child(node)
+        return op_node
+
+    def _parse_arithmetic_expression(self) -> Node:
+        lhs_node = self._parse_unary_operation_and_terminal()
+
+        while self._are_lexemes_remaining() and is_addop(self._get_curr_lexeme().value):
+            lexeme = self._get_curr_lexeme()
+            op_node = self._parse_operator(lexeme.value)
+            rhs_node = self._parse_terminals_and_mul_ops()
+            op_node.add_child(lhs_node)
+            op_node.add_child(rhs_node)
+            lhs_node = op_node
+
+        return lhs_node
+
     def _parse_to_string(self) -> Node:
         self._expect_key_word(KeyWords.TO_STRING)
+        to_string_node = Node(self._get_curr_lexeme())
         self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
         self._go_to_next_lexeme()
@@ -265,12 +370,13 @@ class Parser:
         equal_lexeme = self._get_curr_lexeme()
         equal_node = Node(equal_lexeme)
         equal_node.add_child(identifier_node)
+        self._go_to_next_lexeme()
 
         var = self._get_variable(identifier_node.get_lexeme())
         var_type = var.type
 
         if var_type in (VariableTypes.INT, VariableTypes.DOUBLE):
-            pass  # TODO: parse arithmetic expression
+            rhs_node = self._parse_arithmetic_expression()
         elif var_type == VariableTypes.STRING:
             rhs_node = self._parse_string_expression()
         elif var_type == VariableTypes.BOOL:
