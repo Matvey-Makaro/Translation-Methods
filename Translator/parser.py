@@ -136,7 +136,7 @@ class Parser:
             if var.type != type:
                 raise ExpectedError(str(type) + " variable expected", self._fname, lexeme.line_num, lexeme.col_num)
         else:
-            if var.type in type:
+            if var.type not in type:
                 raise ExpectedError("One of the following variable types expected: " + str(type), self._fname,
                                     lexeme.line_num, lexeme.col_num)
 
@@ -170,6 +170,9 @@ class Parser:
         return self._curr_lex_index < len(self._lexemes)
 
     def _get_curr_lexeme(self) -> LexTableItem:
+        if not self._are_lexemes_remaining():
+            lexeme = self._lexemes[self._curr_lex_index - 1]
+            raise ParserError("Unexpected end of file", self._fname, lexeme.col_num, lexeme.col_num)
         return self._lexemes[self._curr_lex_index]
 
     def _get_variable(self, lexeme: LexTableItem) -> VariableTableItem:
@@ -348,12 +351,12 @@ class Parser:
         try:
             node = self._parse_arithmetic_expression()
             return node, ComparisonTypes.ARITHMETIC
-        except ParserError:
+        except ExpectedError:
             self._curr_lex_index = old_lex_index
             try:
                 node = self._parse_string_expression()
                 return node, ComparisonTypes.STRING
-            except ParserError:
+            except ExpectedError:
                 raise ExpectedError("arithmetic or string expression", self._fname, lexeme.line_num, lexeme.col_num)
 
     def _parse_comparison(self) -> Node:
@@ -374,9 +377,8 @@ class Parser:
 
     def _parse_bool_term(self) -> Node:
         lexeme = self._get_curr_lexeme()
-        if lexeme.type == LexemTypes.IDENTIFIER:
-            if self._get_variable(lexeme).type == VariableTypes.BOOL:
-                node = self._parse_using_identifier()
+        if lexeme.type == LexemTypes.IDENTIFIER and self._get_variable(lexeme).type == VariableTypes.BOOL:
+            node = self._parse_using_identifier()
         elif self._is_match_cur_lexeme(Delimiters.OPEN_PARENTHESIS):
             old_lex_index = self._curr_lex_index
             self._go_to_next_lexeme()
@@ -440,8 +442,8 @@ class Parser:
         self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
         self._go_to_next_lexeme()
+        # TODO: Add bool_expression.
         expr_node = self._parse_arithmetic_expression()
-        self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
         self._go_to_next_lexeme()
         to_string_node.add_child(expr_node)
@@ -487,15 +489,17 @@ class Parser:
 
     def _parse_print(self) -> Node:
         self._expect_key_word(KeyWords.PRINT)
+        print_node = Node(self._get_curr_lexeme())
         self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
         self._go_to_next_lexeme()
-        # TODO: parse string here
-        self._go_to_next_lexeme()
+        string_expr_node = self._parse_string_expression()
         self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
         self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.SEMICOLON)
         self._go_to_next_lexeme()
+        print_node.add_child(string_expr_node)
+        return print_node
 
     def _parse_var_type(self) -> (Node, VariableTypes):
         type_lexeme = self._get_curr_lexeme()
@@ -515,15 +519,15 @@ class Parser:
         self._go_to_next_lexeme()
         return type_node, var_type
 
-    def _parse_optional_initialization(self, identifier_node: Node) -> Node:
-        if not self._are_lexemes_remaining() or not self._is_match_cur_lexeme(Operators.EQUAL):
-            return identifier_node
+    def _parse_assignment(self, identifier_node: Node) -> Node:
+        self._expect_operator(Operators.EQUAL)
         equal_lexeme = self._get_curr_lexeme()
         equal_node = Node(equal_lexeme)
         equal_node.add_child(identifier_node)
         self._go_to_next_lexeme()
 
-        var = self._get_variable(identifier_node.get_lexeme())
+        identifier_lexeme = identifier_node.get_lexeme()
+        var = self._get_variable(identifier_lexeme)
         var_type = var.type
 
         if var_type in (VariableTypes.INT, VariableTypes.DOUBLE):
@@ -532,9 +536,20 @@ class Parser:
             rhs_node = self._parse_string_expression()
         elif var_type == VariableTypes.BOOL:
             rhs_node = self._parse_bool_expression()
+        else:
+            ParserError("Unknown type of identifier.", self._fname,
+                        identifier_lexeme.line_num, identifier_lexeme.col_num)
+
+        self._expect_delimiter(Delimiters.SEMICOLON)
+        self._go_to_next_lexeme()
 
         equal_node.add_child(rhs_node)
         return equal_node
+
+    def _parse_optional_initialization(self, identifier_node: Node) -> Node:
+        if not self._are_lexemes_remaining() or not self._is_match_cur_lexeme(Operators.EQUAL):
+            return identifier_node
+        return self._parse_assignment(identifier_node)
 
     def _parse_var_declaration(self) -> Node:
         type_node, var_type = self._parse_var_type()
@@ -544,9 +559,42 @@ class Parser:
         # TODO: Доделать self._parse_optional_initialization()
         ident_or_eq_node = self._parse_optional_initialization(identifier_node)
         declaration_node.add_child(ident_or_eq_node)
+        return declaration_node
+
+    def _parse_if(self) -> Node:
+        self._expect_key_word(KeyWords.IF)
+        if_node = Node(self._get_curr_lexeme())
+        self._go_to_next_lexeme()
+        self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
+        self._go_to_next_lexeme()
+        condition_node = self._parse_bool_expression()
+        self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
+        self._go_to_next_lexeme()
+        if_statement_node = self._parse_statement()
+        if_node.add_child(condition_node)
+        if_node.add_child(if_statement_node)
+
+        if self._are_lexemes_remaining() and self._is_match_cur_lexeme(KeyWords.ELSE):
+            self._go_to_next_lexeme()
+            else_statement_node = self._parse_statement()
+            if_node.add_child(else_statement_node)
+
+        return if_node
+
+    def _parse_exit(self) -> Node:
+        self._expect_key_word(KeyWords.EXIT)
+        exit_node = Node(self._get_curr_lexeme())
+        self._go_to_next_lexeme()
+        self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
+        self._go_to_next_lexeme()
+        exit_code_node = self._parse_arithmetic_expression()
+        self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
+        self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.SEMICOLON)
         self._go_to_next_lexeme()
-        return declaration_node
+
+        exit_node.add_child(exit_code_node)
+        return exit_node
 
     def _parse_statement(self) -> Node:
         lexeme = self._get_curr_lexeme()
@@ -555,9 +603,16 @@ class Parser:
                 return self._parse_print()
             elif is_variable_type(lexeme.value):
                 return self._parse_var_declaration()
+            elif lexeme.value == KeyWords.IF:
+                return self._parse_if()
+            elif lexeme.value == KeyWords.EXIT:
+                return self._parse_exit()
         elif lexeme.type == LexemTypes.DELIMITER:
             if lexeme.value == Delimiters.OPEN_BRACES:
                 return self._parse_block_code()
+        elif lexeme.type == LexemTypes.IDENTIFIER:
+            identifier_node = self._parse_using_identifier()
+            return self._parse_assignment(identifier_node)
 
     def parse(self):
         while self._are_lexemes_remaining():
