@@ -98,10 +98,17 @@ class Parser:
         self._block_id = 0
         self._scope_stack = [(self._block_level, self._block_id)]
         self._root = Node(None, NodeTypes.CODE_BLOCK)
+        self._nesting_while = 0
         self.parse()
 
     def print_syntax_tree(self) -> None:
         print_tree(self._root)
+
+    def _is_break_available(self) -> bool:
+        return self._nesting_while > 0
+
+    def _is_continue_available(self) -> bool:
+        return self._nesting_while > 0
 
     def _go_to_next_lexeme(self) -> None:
         self._curr_lex_index += 1
@@ -130,14 +137,14 @@ class Parser:
 
     def _expect_var_type(self, lexeme: LexTableItem, type: VariableTypes or tuple) -> None:
         if lexeme.type != LexemTypes.IDENTIFIER:
-            raise ExpectedError(str(type) + " variable expected", self._fname, lexeme.line_num, lexeme.col_num)
+            raise ExpectedError(str(type) + " variable", self._fname, lexeme.line_num, lexeme.col_num)
         var = self._get_variable(lexeme)
         if isinstance(type, VariableTypes):
             if var.type != type:
-                raise ExpectedError(str(type) + " variable expected", self._fname, lexeme.line_num, lexeme.col_num)
+                raise ExpectedError(str(type) + " variable", self._fname, lexeme.line_num, lexeme.col_num)
         else:
             if var.type not in type:
-                raise ExpectedError("One of the following variable types expected: " + str(type), self._fname,
+                raise ExpectedError("One of the following variable types: " + str(type), self._fname,
                                     lexeme.line_num, lexeme.col_num)
 
     def _expect_identifier(self) -> None:
@@ -368,7 +375,7 @@ class Parser:
         rhs_node, rhs_type = self._parse_comparison_term()
 
         if lhs_type != rhs_type:
-            raise ParserError("Cannot compare " + str(lhs_type) + "and" + str(rhs_type),
+            raise ParserError("Can't compare " + str(lhs_type) + " and " + str(rhs_type),
                               self._fname, lexeme.line_num, lexeme.col_num)
 
         op_node.add_child(lhs_node)
@@ -540,9 +547,6 @@ class Parser:
             ParserError("Unknown type of identifier.", self._fname,
                         identifier_lexeme.line_num, identifier_lexeme.col_num)
 
-        self._expect_delimiter(Delimiters.SEMICOLON)
-        self._go_to_next_lexeme()
-
         equal_node.add_child(rhs_node)
         return equal_node
 
@@ -559,6 +563,8 @@ class Parser:
         # TODO: Доделать self._parse_optional_initialization()
         ident_or_eq_node = self._parse_optional_initialization(identifier_node)
         declaration_node.add_child(ident_or_eq_node)
+        self._expect_delimiter(Delimiters.SEMICOLON)
+        self._go_to_next_lexeme()
         return declaration_node
 
     def _parse_if(self) -> Node:
@@ -581,6 +587,25 @@ class Parser:
 
         return if_node
 
+    def _parse_while(self) -> Node:
+        self._expect_key_word(KeyWords.WHILE)
+        while_node = Node(self._get_curr_lexeme())
+        self._go_to_next_lexeme()
+        self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
+        self._go_to_next_lexeme()
+        condition_node = self._parse_bool_expression()
+        while_node.add_child(condition_node)
+        self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
+        self._go_to_next_lexeme()
+        if self._is_match_cur_lexeme(Delimiters.SEMICOLON):
+            return while_node
+
+        self._nesting_while += 1
+        statement_node = self._parse_statement()
+        self._nesting_while -= 1
+        while_node.add_child(statement_node)
+        return while_node
+
     def _parse_exit(self) -> Node:
         self._expect_key_word(KeyWords.EXIT)
         exit_node = Node(self._get_curr_lexeme())
@@ -596,6 +621,28 @@ class Parser:
         exit_node.add_child(exit_code_node)
         return exit_node
 
+    def _parse_break(self) -> Node:
+        lexeme = self._get_curr_lexeme()
+        if not self._is_break_available():
+            raise ParserError("break is not available in this context.", self._fname, lexeme.line_num, lexeme.col_num)
+        self._expect_key_word(KeyWords.BREAK)
+        node = Node(lexeme)
+        self._go_to_next_lexeme()
+        self._expect_delimiter(Delimiters.SEMICOLON)
+        self._go_to_next_lexeme()
+        return node
+
+    def _parse_continue(self) -> Node:
+        lexeme = self._get_curr_lexeme()
+        if not self._is_continue_available():
+            raise ParserError("continue is not available in this context.", self._fname, lexeme.line_num, lexeme.col_num)
+        self._expect_key_word(KeyWords.CONTINUE)
+        node = Node(lexeme)
+        self._go_to_next_lexeme()
+        self._expect_delimiter(Delimiters.SEMICOLON)
+        self._go_to_next_lexeme()
+        return node
+
     def _parse_statement(self) -> Node:
         lexeme = self._get_curr_lexeme()
         if lexeme.type == LexemTypes.KEY_WORD:
@@ -605,14 +652,21 @@ class Parser:
                 return self._parse_var_declaration()
             elif lexeme.value == KeyWords.IF:
                 return self._parse_if()
+            elif lexeme.value == KeyWords.WHILE:
+                return self._parse_while()
             elif lexeme.value == KeyWords.EXIT:
                 return self._parse_exit()
+            elif lexeme.value == KeyWords.BREAK:
+                return self._parse_break()
+            elif lexeme.value == KeyWords.CONTINUE:
+                return self._parse_continue()
         elif lexeme.type == LexemTypes.DELIMITER:
             if lexeme.value == Delimiters.OPEN_BRACES:
                 return self._parse_block_code()
         elif lexeme.type == LexemTypes.IDENTIFIER:
             identifier_node = self._parse_using_identifier()
-            return self._parse_assignment(identifier_node)
+            node = self._parse_assignment(identifier_node)
+            return node
 
     def parse(self):
         while self._are_lexemes_remaining():

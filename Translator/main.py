@@ -1,5 +1,5 @@
 from lexical_analyzer import *
-from parser import Parser
+from parser import Parser, ParserError
 
 
 def main() -> None:
@@ -13,23 +13,27 @@ def main() -> None:
         for lexem in lexemes:
             print(lexem)
         parser = Parser(fname, lexemes, literal_table, variable_table)
+
+        print('######################################################################################')
+        print("Literal table: ")
+        # print(literal_table._name_table)
+        for i in literal_table._literals:
+            print(i)
+
+        print('######################################################################################')
+        print("Variable table: ")
+        for i in variable_table:
+            print(i)
+
+        print('######################################################################################')
+        print("Syntax tree: ")
+        parser.print_syntax_tree()
     except LexicalAnalyzerError as ex:
         print(ex)
+    except ParserError as ex:
+        print(ex)
 
-    print('######################################################################################')
-    print("Literal table: ")
-    # print(literal_table._name_table)
-    for i in literal_table._literals:
-        print(i)
 
-    print('######################################################################################')
-    print("Variable table: ")
-    for i in variable_table:
-        print(i)
-
-    print('######################################################################################')
-    print("Syntax tree: ")
-    parser.print_syntax_tree()
 
 
 if __name__ == '__main__':
