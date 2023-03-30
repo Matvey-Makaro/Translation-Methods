@@ -34,17 +34,17 @@ class ParserError(Exception):
 
 class ExpectedError(ParserError):
     def __init__(self, expected: str, fname: str, line_num: int, ch_num: int):
-        super().__init__(f"{expected} expected", fname, line_num, ch_num)
+        super().__init__(f"{expected} expected.", fname, line_num, ch_num)
 
 
 class UsingBeforeDeclarationError(ParserError):
     def __init__(self, var_name: str, fname: str, line_num: int, ch_num: int):
-        super().__init__(f"Varible {var_name} using before declaration", fname, line_num, ch_num)
+        super().__init__(f"Varible {var_name} using before declaration.", fname, line_num, ch_num)
 
 
 class DoubleDeclarationError(ParserError):
     def __init__(self, var_name: str, fname: str, line_num: int, ch_num: int):
-        super().__init__(f"Double declaration of variable {var_name}", fname, line_num, ch_num)
+        super().__init__(f"Double declaration of variable {var_name}.", fname, line_num, ch_num)
 
 
 class NodeTypes(Enum):
@@ -573,6 +573,9 @@ class Parser:
         self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
         self._go_to_next_lexeme()
+        if self._is_match_cur_lexeme(Delimiters.CLOSE_PARENTHESIS):
+            lexeme = self._get_curr_lexeme()
+            raise ExpectedError("Bool expression", self._fname, lexeme.line_num, lexeme.col_num)
         condition_node = self._parse_bool_expression()
         self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
         self._go_to_next_lexeme()
@@ -593,6 +596,9 @@ class Parser:
         self._go_to_next_lexeme()
         self._expect_delimiter(Delimiters.OPEN_PARENTHESIS)
         self._go_to_next_lexeme()
+        if self._is_match_cur_lexeme(Delimiters.CLOSE_PARENTHESIS):
+            lexeme = self._get_curr_lexeme()
+            raise ExpectedError("Bool expression", self._fname, lexeme.line_num, lexeme.col_num)
         condition_node = self._parse_bool_expression()
         while_node.add_child(condition_node)
         self._expect_delimiter(Delimiters.CLOSE_PARENTHESIS)
@@ -660,13 +666,21 @@ class Parser:
                 return self._parse_break()
             elif lexeme.value == KeyWords.CONTINUE:
                 return self._parse_continue()
+            else:
+                raise ParserError("Unexpected lexeme: " + str(lexeme), self._fname, lexeme.line_num, lexeme.col_num)
         elif lexeme.type == LexemTypes.DELIMITER:
             if lexeme.value == Delimiters.OPEN_BRACES:
                 return self._parse_block_code()
+            else:
+                raise ParserError("Unexpected lexeme: " + str(lexeme), self._fname, lexeme.line_num, lexeme.col_num)
         elif lexeme.type == LexemTypes.IDENTIFIER:
             identifier_node = self._parse_using_identifier()
             node = self._parse_assignment(identifier_node)
+            self._expect_delimiter(Delimiters.SEMICOLON)
+            self._go_to_next_lexeme()
             return node
+        else:
+            raise ParserError("Unexpected lexeme: " + str(lexeme), self._fname, lexeme.line_num, lexeme.col_num)
 
     def parse(self):
         while self._are_lexemes_remaining():
