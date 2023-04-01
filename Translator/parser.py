@@ -104,6 +104,9 @@ class Parser:
     def print_syntax_tree(self) -> None:
         print_tree(self._root)
 
+    def get_tree(self) -> Node:
+        return self._root
+
     def _is_break_available(self) -> bool:
         return self._nesting_while > 0
 

@@ -1,5 +1,6 @@
 from lexical_analyzer import *
 from parser import Parser, ParserError
+from semantic_analyzer import SemanticAnalyzer, SemanticError
 
 
 def main() -> None:
@@ -28,10 +29,16 @@ def main() -> None:
         print('######################################################################################')
         print("Syntax tree: ")
         parser.print_syntax_tree()
+        root = parser.get_tree()
+
+        semantic_analyzer = SemanticAnalyzer(fname, root, literal_table, variable_table)
     except LexicalAnalyzerError as ex:
         print(ex)
     except ParserError as ex:
         print(ex)
+    except SemanticError as ex:
+        print(ex)
+
 
 
 
