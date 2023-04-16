@@ -34,3 +34,5 @@ class VariableTableItem:
     type: VariableTypes
     block_level: int
     block_id: int
+    is_array: bool = False,
+    array_size: int = 0

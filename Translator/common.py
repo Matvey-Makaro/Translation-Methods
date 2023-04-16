@@ -30,6 +30,8 @@ class Delimiters(Enum):
     SEMICOLON = 2,
     OPEN_BRACES = 3,
     CLOSE_BRACES = 4,
+    OPEN_SQUARE_BRACKET = 5,
+    CLOSE_SQUARE_BRACKET = 6
 
 
 class Operators(Enum):
@@ -48,7 +50,8 @@ class Operators(Enum):
     LESS_OR_EQUAL = 12,
     GREATER_OR_EQUAL = 13,
     PERCENT = 14,
-    DOUBLE_EQUAL = 15
+    DOUBLE_EQUAL = 15,
+    AMPERSAND = 16
 
 
 class States(Enum):
@@ -100,7 +103,9 @@ delimiters = {
     ')': Delimiters.CLOSE_PARENTHESIS,
     ';': Delimiters.SEMICOLON,
     '{': Delimiters.OPEN_BRACES,
-    '}': Delimiters.CLOSE_BRACES
+    '}': Delimiters.CLOSE_BRACES,
+    '[': Delimiters.OPEN_SQUARE_BRACKET,
+    ']': Delimiters.CLOSE_SQUARE_BRACKET
 }
 
 operators = {
@@ -119,7 +124,8 @@ operators = {
     '*': Operators.ASTERISK,
     '/': Operators.SLASH,
     '%': Operators.PERCENT,
-    '//': Operators.DOUBLE_SLASH
+    '//': Operators.DOUBLE_SLASH,
+    '&': Operators.AMPERSAND
 }
 
 

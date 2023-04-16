@@ -47,10 +47,16 @@ class DoubleDeclarationError(ParserError):
         super().__init__(f"Double declaration of variable {var_name}.", fname, line_num, ch_num)
 
 
+class NotSubscriptable(ParserError):
+    def __init__(self, var_name: str, fname: str, line_num: int, ch_num: int):
+        super().__init__(f"Variable {var_name} is not subscriptable.", fname, line_num, ch_num)
+
+
 class NodeTypes(Enum):
     COMMON = 0,
     DECLARATION = 1,
-    CODE_BLOCK = 2
+    CODE_BLOCK = 2,
+    INDEX_APPEAL = 3
 
 
 class Node:
@@ -69,7 +75,7 @@ class Node:
         return self._lexeme
 
     def __str__(self):
-        if self._lexeme is None:
+        if self._type != NodeTypes.COMMON:
             return str(self._type)
         elif self._lexeme.type == LexemTypes.IDENTIFIER or \
                 self._lexeme.type in (LexemTypes.INT_NUM, LexemTypes.DOUBLE_NUM, LexemTypes.STRING):
@@ -176,6 +182,11 @@ class Parser:
         if lexeme.type != LexemTypes.STRING:
             raise ExpectedError("String literal", self._fname, lexeme.line_num, lexeme.col_num)
 
+    def _expect_int_literal(self) -> None:
+        lexeme = self._get_curr_lexeme()
+        if lexeme.type != LexemTypes.INT_NUM:
+            raise ExpectedError("Int literal", self._fname, lexeme.line_num, lexeme.col_num)
+
     def _are_lexemes_remaining(self) -> bool:
         return self._curr_lex_index < len(self._lexemes)
 
@@ -187,6 +198,9 @@ class Parser:
 
     def _get_variable(self, lexeme: LexTableItem) -> VariableTableItem:
         return self._variable_table[lexeme.value]
+
+    def _get_literal(self, lexeme: LexTableItem) -> LiteralTableItem:
+        return self._literal_table.get(lexeme.value)
 
     def _enter_block(self) -> None:
         self._block_level += 1
@@ -213,6 +227,22 @@ class Parser:
 
         return code_block_node
 
+    def _parse_optional_array(self, identifier_node: Node) -> Node:
+        if not self._are_lexemes_remaining() or not self._is_match_cur_lexeme(Delimiters.OPEN_SQUARE_BRACKET):
+            return identifier_node
+
+        self._go_to_next_lexeme()
+        self._expect_int_literal()
+        identifier_lexeme = identifier_node.get_lexeme()
+        identifier_var = self._get_variable(identifier_lexeme)
+        arr_size = self._get_literal(self._get_curr_lexeme()).value
+        identifier_var.is_array = True
+        identifier_var.array_size = arr_size
+        self._go_to_next_lexeme()
+        self._expect_delimiter(Delimiters.CLOSE_SQUARE_BRACKET)
+        self._go_to_next_lexeme()
+        return identifier_node
+
     def _parse_declare_identifier(self, var_type: VariableTypes) -> Node:
         self._expect_identifier()
         lexeme = self._get_curr_lexeme()
@@ -236,34 +266,54 @@ class Parser:
         curr_var.block_id = block_id
 
         self._go_to_next_lexeme()
+
+        node = self._parse_optional_array(node)
+
         return node
 
     def _parse_using_identifier(self) -> Node:
         self._expect_identifier()
         lexeme = self._get_curr_lexeme()
-        node = Node(lexeme)
-
         var = self._get_variable(lexeme)
+
         if var.type == VariableTypes.UNKNOWN:
             raise UsingBeforeDeclarationError(var.name, self._fname, lexeme.line_num, lexeme.col_num)
 
         var_real_id = -1
+        was_found = False
         for scope in reversed(self._scope_stack):
+            if was_found:
+                break
             block_level = scope[0]
             block_id = scope[1]
             searched_var = VariableTableItem(var.name, var.type, block_level, block_id)
-
-            try:
-                var_real_id = self._variable_table.index(searched_var)
-                break
-            except ValueError:
-                pass
+            for i in range(len(self._variable_table)):
+                variable = self._variable_table[i]
+                if variable.name == var.name and variable.type == variable.type and \
+                        variable.block_level == block_level and variable.block_id == block_id:
+                    var_real_id = i
+                    was_found = True
+                    break
 
         if var_real_id < 0:
             raise UsingBeforeDeclarationError(var.name, self._fname, lexeme.line_num, lexeme.col_num)
 
         lexeme.value = var_real_id
         self._go_to_next_lexeme()
+
+        if self._is_match_cur_lexeme(Delimiters.OPEN_SQUARE_BRACKET):
+            if not var.is_array:
+                raise NotSubscriptable(var.name, self._fname, lexeme.line_num, lexeme.col_num)
+
+            self._go_to_next_lexeme()
+            node = Node(lexeme, NodeTypes.INDEX_APPEAL)
+            node.add_child(Node(lexeme))
+            node.add_child(self._parse_arithmetic_expression())
+            self._expect_delimiter(Delimiters.CLOSE_SQUARE_BRACKET)
+            self._go_to_next_lexeme()
+        else:
+            node = Node(lexeme)
+
         return node
 
     def _parse_operator(self, op: Operators):
@@ -563,7 +613,6 @@ class Parser:
         identifier_node = self._parse_declare_identifier(var_type)
         declaration_node = Node(None, NodeTypes.DECLARATION)
         declaration_node.add_child(type_node)
-        # TODO: Доделать self._parse_optional_initialization()
         ident_or_eq_node = self._parse_optional_initialization(identifier_node)
         declaration_node.add_child(ident_or_eq_node)
         self._expect_delimiter(Delimiters.SEMICOLON)
@@ -644,7 +693,8 @@ class Parser:
     def _parse_continue(self) -> Node:
         lexeme = self._get_curr_lexeme()
         if not self._is_continue_available():
-            raise ParserError("continue is not available in this context.", self._fname, lexeme.line_num, lexeme.col_num)
+            raise ParserError("continue is not available in this context.", self._fname, lexeme.line_num,
+                              lexeme.col_num)
         self._expect_key_word(KeyWords.CONTINUE)
         node = Node(lexeme)
         self._go_to_next_lexeme()

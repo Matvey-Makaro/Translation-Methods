@@ -4,6 +4,7 @@ from semantic_analyzer import SemanticAnalyzer, SemanticError
 
 
 def main() -> None:
+    a = 4
     # fname = input("Enter file name: ")
     fname = "test.cpp"
     literal_table = LiteralTable()

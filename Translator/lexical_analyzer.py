@@ -4,7 +4,7 @@ from common import *
 
 class LexicalAnalyzerError(Exception):
     def __init__(self, text: str, fname: str, line_num: int, ch_num: int):
-        self._txt = 'File "' + fname + '", line ' + str(line_num) + ' col ' + str(ch_num) + ': ' + text
+        self._txt = 'Lexical analyzer:' + 'File "' + fname + '", line ' + str(line_num) + ' col ' + str(ch_num) + ': ' + text
         super().__init__(self._txt)
 
 
@@ -90,7 +90,7 @@ class LexicalAnalyzer:
             self._readch()
 
         if not is_whitespace(self._ch) and self._ch not in operators and not self._ch == ';' and not is_eof(self._ch) \
-                and self._ch != ')':
+                and self._ch != ')' and self._ch != ']':
             self._error_description = "wrong characters after a number"
             self._state = States.ERROR
             return
