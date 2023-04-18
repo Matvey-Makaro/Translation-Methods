@@ -27,6 +27,9 @@ class LiteralTable:
     def get(self, id: int) -> LiteralTableItem:
         return self._literals[id]
 
+    def get_literals(self) -> list:
+        return self._literals
+
 
 @dataclass()
 class VariableTableItem:

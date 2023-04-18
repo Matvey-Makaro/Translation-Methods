@@ -1,47 +1,21 @@
 from lexical_analyzer import *
 from parser import Parser, ParserError
 from semantic_analyzer import SemanticAnalyzer, SemanticError
+from translator import Translator
 
 
 def main() -> None:
-    a = 4
     # fname = input("Enter file name: ")
     fname = "test.cpp"
-    literal_table = LiteralTable()
-    variable_table = []
     try:
-        lex_analyzer = LexicalAnalyzer(fname, literal_table, variable_table)
-        lexemes = lex_analyzer.get_lexemes()
-        for lexem in lexemes:
-            print(lexem)
-        parser = Parser(fname, lexemes, literal_table, variable_table)
-
-        print('######################################################################################')
-        print("Literal table: ")
-        # print(literal_table._name_table)
-        for i in literal_table._literals:
-            print(i)
-
-        print('######################################################################################')
-        print("Variable table: ")
-        for i in variable_table:
-            print(i)
-
-        print('######################################################################################')
-        print("Syntax tree: ")
-        parser.print_syntax_tree()
-        root = parser.get_tree()
-
-        semantic_analyzer = SemanticAnalyzer(fname, root, literal_table, variable_table)
+        translator = Translator(fname)
+        translator.translate()
     except LexicalAnalyzerError as ex:
         print(ex)
     except ParserError as ex:
         print(ex)
     except SemanticError as ex:
         print(ex)
-
-
-
 
 
 if __name__ == '__main__':
