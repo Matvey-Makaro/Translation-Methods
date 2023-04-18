@@ -39,3 +39,4 @@ class VariableTableItem:
     block_id: int
     is_array: bool = False,
     array_size: int = 0
+    value = None

@@ -17,6 +17,8 @@ def main() -> None:
     except SemanticError as ex:
         print(ex)
 
+    delete_later = 0
+
 
 if __name__ == '__main__':
     main()

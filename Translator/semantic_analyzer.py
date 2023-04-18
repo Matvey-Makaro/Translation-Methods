@@ -1,6 +1,7 @@
 from common import *
 from tables import *
-from parser import Node
+from common import Node
+
 
 class SemanticError(Exception):
     def __init__(self, text: str, fname: str, line_num: int, ch_num: int):
@@ -42,8 +43,6 @@ class SemanticAnalyzer:
 
         for ch in node.get_childs():
             self._check_int_expr(ch)
-
-
 
     def _analyze(self, node: Node = None):
         if node is None:

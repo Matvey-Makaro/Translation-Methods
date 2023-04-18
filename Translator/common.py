@@ -171,6 +171,12 @@ def is_eof(ch: str) -> bool:
     return ch == ''
 
 
+def is_literal(lexeme: LexTableItem) -> bool:
+    if lexeme.type in (LexemTypes.INT_NUM, LexemTypes.DOUBLE_NUM, LexemTypes.STRING):
+        return True
+    return False
+
+
 def get_escape_sequences(ch: str) -> str:
     if ch == 'a':
         return '\a'
@@ -194,3 +200,38 @@ def get_escape_sequences(ch: str) -> str:
         return '\\'
     else:
         raise ValueError("No such escape sequence")
+
+
+class NodeTypes(Enum):
+    COMMON = 0,
+    DECLARATION = 1,
+    CODE_BLOCK = 2,
+    INDEX_APPEAL = 3
+
+
+class Node:
+    def __init__(self, lexeme: LexTableItem or None, type: NodeTypes = NodeTypes.COMMON):
+        self._lexeme = lexeme
+        self._childs = []
+        self._type = type
+
+    def add_child(self, node) -> None:
+        self._childs.append(node)
+
+    def get_childs(self) -> list:
+        return self._childs
+
+    def get_lexeme(self) -> LexTableItem:
+        return self._lexeme
+
+    def get_type(self) -> NodeTypes:
+        return self._type
+
+    def __str__(self):
+        if self._type != NodeTypes.COMMON:
+            return str(self._type)
+        elif self._lexeme.type == LexemTypes.IDENTIFIER or \
+                self._lexeme.type in (LexemTypes.INT_NUM, LexemTypes.DOUBLE_NUM, LexemTypes.STRING):
+            return str(self._lexeme.type) + " " + str(self._lexeme.value)
+        else:
+            return str(self._lexeme.value)

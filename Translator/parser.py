@@ -52,38 +52,6 @@ class NotSubscriptable(ParserError):
         super().__init__(f"Variable {var_name} is not subscriptable.", fname, line_num, ch_num)
 
 
-class NodeTypes(Enum):
-    COMMON = 0,
-    DECLARATION = 1,
-    CODE_BLOCK = 2,
-    INDEX_APPEAL = 3
-
-
-class Node:
-    def __init__(self, lexeme: LexTableItem or None, type: NodeTypes = NodeTypes.COMMON):
-        self._lexeme = lexeme
-        self._childs = []
-        self._type = type
-
-    def add_child(self, node) -> None:
-        self._childs.append(node)
-
-    def get_childs(self) -> list:
-        return self._childs
-
-    def get_lexeme(self) -> LexTableItem:
-        return self._lexeme
-
-    def __str__(self):
-        if self._type != NodeTypes.COMMON:
-            return str(self._type)
-        elif self._lexeme.type == LexemTypes.IDENTIFIER or \
-                self._lexeme.type in (LexemTypes.INT_NUM, LexemTypes.DOUBLE_NUM, LexemTypes.STRING):
-            return str(self._lexeme.type) + " " + str(self._lexeme.value)
-        else:
-            return str(self._lexeme.value)
-
-
 def print_tree(root, depth: int = 0):
     if root is None:
         return
