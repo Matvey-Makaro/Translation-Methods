@@ -61,6 +61,8 @@ class Translator:
         self._root = self._parser.get_tree()
         self._semantic_analyzer = SemanticAnalyzer(self._fname, self._root, self._literal_table, self._variable_table)
 
+        print('######################################################################################')
+        print("Program execution:")
         self._execute_code(self._root)
 
     def _get_variable(self, lexeme: LexTableItem) -> VariableTableItem:
@@ -72,19 +74,102 @@ class Translator:
 
     def _declare_var(self, declaration_node: Node):
         childs = declaration_node.get_childs()
-        assert(len(childs) == 2)
+        assert (len(childs) == 2)
         self._execute_code(childs[1])
+
+    def _execute_true(self, node: Node) -> bool:
+        assert (node.get_lexeme().value == KeyWords.TRUE)
+        return True
+
+    def _execute_false(self, node: Node) -> bool:
+        assert (node.get_lexeme().value == KeyWords.FALSE)
+        return False
+
+    def _execute_while(self, node: Node) -> None:
+        assert (node.get_lexeme().value == KeyWords.WHILE)
+        childs = node.get_childs()
+        assert (len(childs) == 2)
+        condition_node = childs[0]
+        body_node = childs[1]
+
+        while self._execute_code(condition_node):
+            self._execute_code(body_node)
+
+    def _execute_print(self, node: Node) -> None:
+        assert (node.get_lexeme().value == KeyWords.PRINT)
+        childs = node.get_childs()
+        assert (len(childs) == 1)
+        string = self._execute_code(childs[0])
+        print(string, end='')
+
+    def _execute_scan(self, node: Node) -> str:
+        assert (node.get_lexeme().value == KeyWords.SCAN)
+        childs = node.get_childs()
+        assert (len(childs) == 0)
+        return input()
+
+    def _execute_to_string(self, node: Node) -> str:
+        assert (node.get_lexeme().value == KeyWords.TO_STRING)
+        childs = node.get_childs()
+        assert (len(childs) == 1)
+        child = childs[0]
+        arg = self._execute_code(child)
+        try:
+            string = str(arg)
+        except Exception:
+            lexeme = child.get_lexeme()
+            print("Runtime error! File: ", self._fname, "line: ", lexeme.line_num, " col: ", lexeme.col_num,
+                  ": Error on type conversion to string.")
+            exit(-1)
+        return string
+
+    def _execute_stoi(self, node: Node) -> int:
+        assert (node.get_lexeme().value == KeyWords.STOI)
+        childs = node.get_childs()
+        assert (len(childs) == 1)
+        child = childs[0]
+        arg = self._execute_code(child)
+        try:
+            number = int(arg)
+        except Exception:
+            lexeme = child.get_lexeme()
+            print("Runtime error! File:", self._fname, "line:", lexeme.line_num, "col:", lexeme.col_num,
+                  ": Error on type conversion to int.")
+            exit(-1)
+        return number
+
+    def _execute_stod(self, node: Node) -> float:
+        assert (node.get_lexeme().value == KeyWords.STOD)
+        childs = node.get_childs()
+        assert (len(childs) == 1)
+        child = childs[0]
+        arg = self._execute_code(child)
+        try:
+            number = float(arg)
+        except Exception:
+            lexeme = child.get_lexeme()
+            print("Runtime error! File:", self._fname, "line:", lexeme.line_num, "col:", lexeme.col_num,
+                  ": Error on type conversion to double.")
+            exit(-1)
+        return number
+
+    def _execute_exit(self, node: Node) -> None:
+        assert (node.get_lexeme().value == KeyWords.EXIT)
+        childs = node.get_childs()
+        assert (len(childs) == 1)
+        arg = self._execute_code(childs[0])
+        exit(arg)
 
     def _execute_key_words(self, node: Node):
         key_word = node.get_lexeme().value
         if key_word == KeyWords.TRUE:
-            pass
+            return self._execute_true(node)
         elif key_word == KeyWords.FALSE:
-            pass
+            return self._execute_false(node)
         elif key_word == KeyWords.NULLPTR:  # TODO: Do.
             pass
         elif key_word == KeyWords.WHILE:
-            pass
+            return self._execute_while(node)
         elif key_word == KeyWords.CONTINUE:
             pass
         elif key_word == KeyWords.BREAK:
@@ -94,25 +179,25 @@ class Translator:
         elif key_word == KeyWords.ELSE:
             pass
         elif key_word == KeyWords.PRINT:
-            pass
+            return self._execute_print(node)
         elif key_word == KeyWords.SCAN:
-            pass
+            return self._execute_scan(node)
         elif key_word == KeyWords.TO_STRING:
-            pass
+            return self._execute_to_string(node)
         elif key_word == KeyWords.STOI:
-            pass
+            return self._execute_stoi(node)
         elif key_word == KeyWords.STOD:
-            pass
+            return self._execute_stod(node)
         elif key_word == KeyWords.EXIT:
-            pass
-        elif key_word in (KeyWords.INT, KeyWords.DOUBLE, KeyWords.BOOL, KeyWords.STRING, KeyWords.VOID): # TODO: do void
+            return self._execute_exit(node)
+        elif key_word in (
+                KeyWords.INT, KeyWords.DOUBLE, KeyWords.BOOL, KeyWords.STRING, KeyWords.VOID):  # TODO: do void
             return None
 
-
     def _execute_equal(self, node: Node):
-        assert(node.get_lexeme().value == Operators.EQUAL)
+        assert (node.get_lexeme().value == Operators.EQUAL)
         childs = node.get_childs()
-        assert(len(childs) == 2)
+        assert (len(childs) == 2)
         lhs_lexeme = childs[0].get_lexeme()
         lhs_var = self._get_variable(lhs_lexeme)
         lhs_var.value = self._execute_code(childs[1])
@@ -150,7 +235,6 @@ class Translator:
             assert 0
 
     def _execute_operators(self, node: Node):
-        # TODO: Написать одну функцию для бинарных операция и другую для унарных
         lexeme = node.get_lexeme()
         if lexeme.value == Operators.EQUAL:
             return self._execute_equal(node)
@@ -184,19 +268,19 @@ class Translator:
         elif lexeme.value == Operators.PERCENT:
             return self._execute_binary_operation(node, lambda lhs, rhs: lhs % rhs)
         elif lexeme.value == Operators.AMPERSAND:
-            pass    # TODO: DO
+            pass  # TODO: DO
         else:
             raise RuntimeError("Unreachable!")
 
     def _execute_identifier(self, node: Node):
         lexeme = node.get_lexeme()
-        assert(lexeme.type == LexemTypes.IDENTIFIER)
+        assert (lexeme.type == LexemTypes.IDENTIFIER)
         var = self._get_variable(lexeme)
         return var.value
 
     def _execute_literal(self, node: Node):
         lexeme = node.get_lexeme()
-        assert(is_literal(lexeme))
+        assert (is_literal(lexeme))
         literal = self.get_literal_table().get(lexeme.value)
 
         if lexeme.type == LexemTypes.INT_NUM:
@@ -235,6 +319,3 @@ class Translator:
             pass
         else:
             raise RuntimeError("Unreachable!")
-
-
-
