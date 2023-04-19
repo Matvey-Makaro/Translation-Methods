@@ -10,6 +10,8 @@ class Translator:
         self._fname = fname
         self._literal_table = LiteralTable()
         self._variable_table = []
+        self._is_break_now = False
+        self._is_continue_now = False
         self._lex_analyzer = None
         self._lexemes = None
         self._parser = None
@@ -71,6 +73,8 @@ class Translator:
     def _execute_code_block(self, code_block_node: Node):
         for child in code_block_node.get_childs():
             self._execute_code(child)
+            if self._is_break_now or self._is_continue_now:
+                break
 
     def _declare_var(self, declaration_node: Node):
         childs = declaration_node.get_childs()
@@ -92,8 +96,24 @@ class Translator:
         condition_node = childs[0]
         body_node = childs[1]
 
-        while self._execute_code(condition_node):
+        while self._execute_code(condition_node) and not self._is_break_now:
             self._execute_code(body_node)
+            self._is_continue_now = False
+
+        self._is_break_now = False
+
+    def _execute_if(self, node: Node) -> None:
+        assert (node.get_lexeme().value == KeyWords.IF)
+        childs = node.get_childs()
+        num_of_childs = len(childs)
+        assert (num_of_childs == 2 or num_of_childs == 3)
+        condition_node = childs[0]
+        if_body_node = childs[1]
+        if self._execute_code(condition_node):
+            self._execute_code(if_body_node)
+        elif num_of_childs == 3:
+            else_body_node = childs[2]
+            self._execute_code(else_body_node)
 
     def _execute_print(self, node: Node) -> None:
         assert (node.get_lexeme().value == KeyWords.PRINT)
@@ -171,13 +191,13 @@ class Translator:
         elif key_word == KeyWords.WHILE:
             return self._execute_while(node)
         elif key_word == KeyWords.CONTINUE:
-            pass
+            self._is_continue_now = True
+            return None
         elif key_word == KeyWords.BREAK:
-            pass
+            self._is_break_now = True
+            return None
         elif key_word == KeyWords.IF:
-            pass
-        elif key_word == KeyWords.ELSE:
-            pass
+            return self._execute_if(node)
         elif key_word == KeyWords.PRINT:
             return self._execute_print(node)
         elif key_word == KeyWords.SCAN:
