@@ -262,25 +262,45 @@ class Translator:
             arr_var = self._get_variable(arr_lexeme)
             dimensions.reverse()
             if len(dimensions) != len(arr_var.dimensions):
-                print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
-                      ": Incomplete indexing in an array.")
-                exit(-1)
+                if arr_var.type != VariableTypes.STRING and len(dimensions) - len(arr_var.dimensions) != 1:
+                    print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
+                          ": Incomplete indexing in an array.")
+                    exit(-1)
 
             index = 0
             arr_size = 1
             for dim in arr_var.dimensions:
                 arr_size *= dim
 
-            for i in range(len(dimensions)):
+            curr_multiplier = arr_size
+            for i in range(len(arr_var.dimensions)):
                 dim = dimensions[i]
                 if dim >= arr_var.dimensions[i]:
                     print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
                           ": Index out of ranges.")
                     exit(-1)
-                curr_multiplier = int(arr_size / arr_var.dimensions[i])
+                curr_multiplier = int(curr_multiplier / arr_var.dimensions[i])
                 index += curr_multiplier * dim
 
-            arr_var.value[index] = val
+            if arr_var.type == VariableTypes.STRING and len(dimensions) - len(arr_var.dimensions) == 1:
+                if len(dimensions) > 1:
+                    curr_str = arr_var.value[index]
+                else:
+                    curr_str = arr_var.value
+                curr_str_list = list(curr_str)
+                if dimensions[-1] >= arr_var.str_size:
+                    print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
+                          ": Index out of ranges.")
+                    exit(-1)
+                curr_str_list[dimensions[-1]] = val
+                if len(dimensions) > 1:
+                    arr_var.value[index] = ''.join(curr_str_list)
+                else:
+                    arr_var.value = ''.join(curr_str_list)
+            else:
+                if arr_var.type == VariableTypes.STRING:
+                    arr_var.str_size = len(val)
+                arr_var.value[index] = val
 
     def _execute_equal(self, node: Node):
         assert (node.get_lexeme().value == Operators.EQUAL)
@@ -294,7 +314,7 @@ class Translator:
             lhs_var = self._get_variable(lhs_lexeme)
             if lhs_var.type == VariableTypes.STRING:
                 lhs_var.is_array = True
-                lhs_var.dimensions = [len(rhs)]
+                lhs_var.str_size = len(rhs)
             lhs_var.value = rhs
         return None
 
@@ -413,16 +433,17 @@ class Translator:
             arr_var = self._get_variable(arr_lexeme)
             dimensions.reverse()
             if len(dimensions) != len(arr_var.dimensions):
-                print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
-                      ": Incomplete indexing in an array.")
-                exit(-1)
+                if arr_var.type != VariableTypes.STRING and len(dimensions) - len(arr_var.dimensions) != 1:
+                    print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
+                          ": Incomplete indexing in an array.")
+                    exit(-1)
 
             index = 0
             arr_size = 1
             for dim in arr_var.dimensions:
                 arr_size *= dim
 
-            for i in range(len(dimensions)):
+            for i in range(len(arr_var.dimensions)):
                 dim = dimensions[i]
                 if dim >= arr_var.dimensions[i]:
                     print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
@@ -431,6 +452,12 @@ class Translator:
                 curr_multiplier = int(arr_size / arr_var.dimensions[i])
                 index += curr_multiplier * dim
 
+            if arr_var.type == VariableTypes.STRING and len(dimensions) - len(arr_var.dimensions) == 1:
+                if dimensions[-1] >= arr_var.str_size:
+                    print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
+                          ": Index out of ranges.")
+                    exit(-1)
+                return arr_var.value[index][dimensions[-1]]
             return arr_var.value[index]
 
     def _execute_code(self, node: Node):

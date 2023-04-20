@@ -1,5 +1,5 @@
 from common import *
-from dataclasses import dataclass
+from dataclasses import *
 
 
 @dataclass()
@@ -38,5 +38,6 @@ class VariableTableItem:
     block_level: int
     block_id: int
     is_array: bool = False,
-    dimensions: list = 0
+    dimensions: list = field(default_factory=list)
+    str_size: int = 0
     value = None

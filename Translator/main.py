@@ -8,12 +8,8 @@ import numpy as np
 def main() -> None:
     # fname = input("Enter file name: ")
 
-    arr = np.empty(10, dtype=np.chararray)
-    print(type(arr[0]))
-    arr[0] = 10
-    print(arr[0])
-
-    fname = "test.cpp"
+    fname = "matrix_multiplication.cpp"
+    # fname = "test.cpp"
     try:
         translator = Translator(fname)
         translator.translate()
