@@ -76,10 +76,45 @@ class Translator:
             if self._is_break_now or self._is_continue_now:
                 break
 
+    def _get_init_value(self, type: VariableTypes):
+        if type == VariableTypes.INT:
+            return 0
+        elif type == VariableTypes.DOUBLE:
+            return 0.0
+        elif type == VariableTypes.STRING:
+            return ""
+        elif type == VariableTypes.BOOL:
+            return False
+        else:
+            raise RuntimeError("Unreachable!")
+
+    def _declare_array(self, node: Node, dimensions: list = []):
+        assert (node.get_type() == NodeTypes.ARRAY_WITH_INDEX)
+        childs = node.get_childs()
+        assert (len(childs) == 2)
+        arr_node = childs[0]
+        dimensions.append(self._execute_code(childs[1]))
+        if arr_node.get_type() == NodeTypes.ARRAY_WITH_INDEX:
+            return self._declare_array(arr_node, dimensions)
+        else:
+            arr_lexeme = arr_node.get_lexeme()
+            arr_var = self._get_variable(arr_lexeme)
+            arr_var.is_array = True
+            dimensions.reverse()
+            arr_var.dimensions = dimensions
+            arr_size = 1
+            for dim in arr_var.dimensions:
+                arr_size *= dim
+            arr_var.value = [self._get_init_value(arr_var.type) for i in range(arr_size)]
+            return arr_var
+
     def _declare_var(self, declaration_node: Node):
         childs = declaration_node.get_childs()
         assert (len(childs) == 2)
-        self._execute_code(childs[1])
+        if childs[1].get_type() == NodeTypes.ARRAY_WITH_INDEX:
+            self._declare_array(childs[1], [])
+        else:
+            self._execute_code(childs[1])
 
     def _execute_true(self, node: Node) -> bool:
         assert (node.get_lexeme().value == KeyWords.TRUE)
@@ -214,13 +249,53 @@ class Translator:
                 KeyWords.INT, KeyWords.DOUBLE, KeyWords.BOOL, KeyWords.STRING, KeyWords.VOID):  # TODO: do void
             return None
 
+    def _assign_val_to_arr_with_index(self, node: Node, val, dimensions: list = []):
+        assert (node.get_type() == NodeTypes.ARRAY_WITH_INDEX)
+        childs = node.get_childs()
+        assert (len(childs) == 2)
+        arr_node = childs[0]
+        dimensions.append(self._execute_code(childs[1]))
+        if arr_node.get_type() == NodeTypes.ARRAY_WITH_INDEX:
+            self._assign_val_to_arr_with_index(arr_node, val, dimensions)
+        else:
+            arr_lexeme = arr_node.get_lexeme()
+            arr_var = self._get_variable(arr_lexeme)
+            dimensions.reverse()
+            if len(dimensions) != len(arr_var.dimensions):
+                print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
+                      ": Incomplete indexing in an array.")
+                exit(-1)
+
+            index = 0
+            arr_size = 1
+            for dim in arr_var.dimensions:
+                arr_size *= dim
+
+            for i in range(len(dimensions)):
+                dim = dimensions[i]
+                if dim >= arr_var.dimensions[i]:
+                    print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
+                          ": Index out of ranges.")
+                    exit(-1)
+                curr_multiplier = int(arr_size / arr_var.dimensions[i])
+                index += curr_multiplier * dim
+
+            arr_var.value[index] = val
+
     def _execute_equal(self, node: Node):
         assert (node.get_lexeme().value == Operators.EQUAL)
         childs = node.get_childs()
         assert (len(childs) == 2)
-        lhs_lexeme = childs[0].get_lexeme()
-        lhs_var = self._get_variable(lhs_lexeme)
-        lhs_var.value = self._execute_code(childs[1])
+        rhs = self._execute_code(childs[1])
+        if childs[0].get_type() == NodeTypes.ARRAY_WITH_INDEX:
+            self._assign_val_to_arr_with_index(childs[0], rhs, [])
+        else:
+            lhs_lexeme = childs[0].get_lexeme()
+            lhs_var = self._get_variable(lhs_lexeme)
+            if lhs_var.type == VariableTypes.STRING:
+                lhs_var.is_array = True
+                lhs_var.dimensions = [len(rhs)]
+            lhs_var.value = rhs
         return None
 
     def _execute_unary_operation(self, node: Node, func):
@@ -325,6 +400,39 @@ class Translator:
         else:
             raise RuntimeError("Unreachable")
 
+    def _execute_get_val_array_with_index(self, node: Node, dimensions: list = []):
+        assert (node.get_type() == NodeTypes.ARRAY_WITH_INDEX)
+        childs = node.get_childs()
+        assert (len(childs) == 2)
+        arr_node = childs[0]
+        dimensions.append(self._execute_code(childs[1]))
+        if arr_node.get_type() == NodeTypes.ARRAY_WITH_INDEX:
+            return self._execute_get_val_array_with_index(arr_node, dimensions)
+        else:
+            arr_lexeme = arr_node.get_lexeme()
+            arr_var = self._get_variable(arr_lexeme)
+            dimensions.reverse()
+            if len(dimensions) != len(arr_var.dimensions):
+                print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
+                      ": Incomplete indexing in an array.")
+                exit(-1)
+
+            index = 0
+            arr_size = 1
+            for dim in arr_var.dimensions:
+                arr_size *= dim
+
+            for i in range(len(dimensions)):
+                dim = dimensions[i]
+                if dim >= arr_var.dimensions[i]:
+                    print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
+                          ": Index out of ranges.")
+                    exit(-1)
+                curr_multiplier = int(arr_size / arr_var.dimensions[i])
+                index += curr_multiplier * dim
+
+            return arr_var.value[index]
+
     def _execute_code(self, node: Node):
         if node is None:
             return
@@ -335,7 +443,7 @@ class Translator:
             return self._execute_code_block(node)
         elif node_type == NodeTypes.DECLARATION:
             return self._declare_var(node)
-        elif node_type == NodeTypes.INDEX_APPEAL:
-            pass
+        elif node_type == NodeTypes.ARRAY_WITH_INDEX:
+            return self._execute_get_val_array_with_index(node, [])
         else:
             raise RuntimeError("Unreachable!")

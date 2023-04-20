@@ -2,10 +2,17 @@ from lexical_analyzer import *
 from parser import Parser, ParserError
 from semantic_analyzer import SemanticAnalyzer, SemanticError
 from translator import Translator
+import numpy as np
 
 
 def main() -> None:
     # fname = input("Enter file name: ")
+
+    arr = np.empty(10, dtype=np.chararray)
+    print(type(arr[0]))
+    arr[0] = 10
+    print(arr[0])
+
     fname = "test.cpp"
     try:
         translator = Translator(fname)

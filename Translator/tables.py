@@ -38,5 +38,5 @@ class VariableTableItem:
     block_level: int
     block_id: int
     is_array: bool = False,
-    array_size: int = 0
+    dimensions: list = 0
     value = None

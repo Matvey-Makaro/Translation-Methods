@@ -199,17 +199,24 @@ class Parser:
         if not self._are_lexemes_remaining() or not self._is_match_cur_lexeme(Delimiters.OPEN_SQUARE_BRACKET):
             return identifier_node
 
-        self._go_to_next_lexeme()
-        self._expect_int_literal()
-        identifier_lexeme = identifier_node.get_lexeme()
-        identifier_var = self._get_variable(identifier_lexeme)
-        arr_size = self._get_literal(self._get_curr_lexeme()).value
+        identifier_var = self._get_variable(identifier_node.get_lexeme())
         identifier_var.is_array = True
-        identifier_var.array_size = arr_size
-        self._go_to_next_lexeme()
-        self._expect_delimiter(Delimiters.CLOSE_SQUARE_BRACKET)
-        self._go_to_next_lexeme()
-        return identifier_node
+        prev_array_with_index_node = None
+        while self._is_match_cur_lexeme(Delimiters.OPEN_SQUARE_BRACKET):
+            array_with_index_node = Node(None, NodeTypes.ARRAY_WITH_INDEX)
+            self._go_to_next_lexeme()
+            arr_size_node = self._parse_arithmetic_expression()
+            if prev_array_with_index_node is not None:
+                array_with_index_node.add_child(prev_array_with_index_node)
+            else:
+                array_with_index_node.add_child(identifier_node)
+            array_with_index_node.add_child(arr_size_node)
+
+            prev_array_with_index_node = array_with_index_node
+            self._expect_delimiter(Delimiters.CLOSE_SQUARE_BRACKET)
+            self._go_to_next_lexeme()
+
+        return array_with_index_node
 
     def _parse_declare_identifier(self, var_type: VariableTypes) -> Node:
         self._expect_identifier()
@@ -269,20 +276,30 @@ class Parser:
         lexeme.value = var_real_id
         self._go_to_next_lexeme()
 
+        # for arrays:
         if self._is_match_cur_lexeme(Delimiters.OPEN_SQUARE_BRACKET):
             if not var.is_array:
                 raise NotSubscriptable(var.name, self._fname, lexeme.line_num, lexeme.col_num)
+        else:
+            return Node(lexeme)
 
+        node = Node(lexeme)
+        prev_array_with_index_node = None
+        while self._is_match_cur_lexeme(Delimiters.OPEN_SQUARE_BRACKET):
+            array_with_index_node = Node(lexeme, NodeTypes.ARRAY_WITH_INDEX)
             self._go_to_next_lexeme()
-            node = Node(lexeme, NodeTypes.INDEX_APPEAL)
-            node.add_child(Node(lexeme))
-            node.add_child(self._parse_arithmetic_expression())
+            arr_size_node = self._parse_arithmetic_expression()
+            if prev_array_with_index_node is not None:
+                array_with_index_node.add_child(prev_array_with_index_node)
+            else:
+                array_with_index_node.add_child(node)
+            array_with_index_node.add_child(arr_size_node)
+
+            prev_array_with_index_node = array_with_index_node
             self._expect_delimiter(Delimiters.CLOSE_SQUARE_BRACKET)
             self._go_to_next_lexeme()
-        else:
-            node = Node(lexeme)
 
-        return node
+        return array_with_index_node
 
     def _parse_operator(self, op: Operators):
         self._expect_operator(op)

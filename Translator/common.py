@@ -206,14 +206,24 @@ class NodeTypes(Enum):
     COMMON = 0,
     DECLARATION = 1,
     CODE_BLOCK = 2,
-    INDEX_APPEAL = 3
+    ARRAY_WITH_INDEX = 3,
+
+
+class NodeRetTypes(Enum):
+    INT = 0,
+    DOUBLE = 1,
+    STRING = 2,
+    VOID = 3,
 
 
 class Node:
-    def __init__(self, lexeme: LexTableItem or None, type: NodeTypes = NodeTypes.COMMON):
+    def __init__(self, lexeme: LexTableItem or None, type: NodeTypes = NodeTypes.COMMON,
+                 ret_type: NodeRetTypes = NodeRetTypes.VOID, ret_is_arr: bool = False):
         self._lexeme = lexeme
         self._childs = []
         self._type = type
+        self._ret_type = ret_type
+        self._ret_is_arr = ret_is_arr
 
     def add_child(self, node) -> None:
         self._childs.append(node)
@@ -226,6 +236,18 @@ class Node:
 
     def get_type(self) -> NodeTypes:
         return self._type
+
+    def get_ret_type(self) -> NodeRetTypes:
+        return self._ret_type
+
+    def set_ret_type(self, type: NodeRetTypes) -> None:
+        self._ret_type = type
+
+    def get_ret_is_arr(self) -> bool:
+        return self._ret_is_arr
+
+    def set_ret_is_arr(self, is_arr: bool) -> None:
+        self._ret_is_arr = is_arr
 
     def __str__(self):
         if self._type != NodeTypes.COMMON:
