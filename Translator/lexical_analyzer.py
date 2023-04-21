@@ -11,7 +11,13 @@ class LexicalAnalyzerError(Exception):
 class LexicalAnalyzer:
     def __init__(self, fname: str, literal_table: LiteralTable, variable_table: list):
         self._fname = fname
-        self._file = open(self._fname, 'r')
+
+        try:
+            self._file = open(self._fname, 'r')
+        except FileNotFoundError as er:
+            print(er)
+            exit(-1)
+
         self._ch = ''
         self._buffer = ''
         self._state = States.START
