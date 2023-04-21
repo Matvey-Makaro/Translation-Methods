@@ -315,7 +315,25 @@ class Translator:
             if lhs_var.type == VariableTypes.STRING:
                 lhs_var.is_array = True
                 lhs_var.str_size = len(rhs)
+
+            if lhs_var.type == VariableTypes.INT:
+                try:
+                    rhs = int(rhs)
+                except Exception:
+                    print("Runtime error! File:", self._fname, "line:", lhs_lexeme.line_num, "col:", lhs_lexeme.col_num,
+                          ": Error type conversion.")
+                    exit(-1)
+
+            if lhs_var.type == VariableTypes.DOUBLE:
+                try:
+                    rhs = float(rhs)
+                except Exception:
+                    print("Runtime error! File:", self._fname, "line:", lhs_lexeme.line_num, "col:", lhs_lexeme.col_num,
+                          ": Error type conversion.")
+                    exit(-1)
+
             lhs_var.value = rhs
+
         return None
 
     def _execute_unary_operation(self, node: Node, func):

@@ -10,6 +10,7 @@ def main() -> None:
 
     fname = "matrix_multiplication.cpp"
     # fname = "test.cpp"
+    # fname = "insert_sorting.cpp"
     try:
         translator = Translator(fname)
         translator.translate()
