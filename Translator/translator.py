@@ -443,13 +443,14 @@ class Translator:
             for dim in arr_var.dimensions:
                 arr_size *= dim
 
+            curr_multiplier = arr_size
             for i in range(len(arr_var.dimensions)):
                 dim = dimensions[i]
                 if dim >= arr_var.dimensions[i]:
                     print("Runtime error! File:", self._fname, "line:", arr_lexeme.line_num, "col:", arr_lexeme.col_num,
                           ": Index out of ranges.")
                     exit(-1)
-                curr_multiplier = int(arr_size / arr_var.dimensions[i])
+                curr_multiplier = int(curr_multiplier / arr_var.dimensions[i])
                 index += curr_multiplier * dim
 
             if arr_var.type == VariableTypes.STRING and len(dimensions) - len(arr_var.dimensions) == 1:
